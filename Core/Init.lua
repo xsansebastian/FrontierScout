@@ -168,8 +168,7 @@ function commands.whoami(self)
 			self:Print(("Roster: %s | rank %s | officer note: %s"):format(tostring(rname), tostring(rank), tostring(note)))
 		end
 	end
-	self:Print(("Can read officer notes: %s | archivist rank: %s | archivist: %s"):format(
-		tostring(self:CanViewOfficerNotes()), tostring(self.acl.ar), tostring(self:AmArchivist())))
+	self:Print("Archivist check: " .. self:ArchivistStatus())
 	local members = 0
 	for _ in pairs(self.roster) do members = members + 1 end
 	local archivists = {}

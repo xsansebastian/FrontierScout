@@ -284,7 +284,8 @@ describe("Curation over the guild network", function()
 	end)
 
 	it("officers are warned about untagged officer-rank players serving data", function()
-		local net = Net.new({ { name = "Arch", rank = 1, archivist = true }, { name = "Sneaky", rank = 1 }, { name = "Off", rank = 1 } })
+		local net = Net.new({ { name = "Arch", rank = 1, archivist = true }, { name = "Sneaky", rank = 1 }, { name = "Off", rank = 1 } },
+			{ guildInfo = "[FS1 s=2 eo=2 ea=1 do=2 da=1 r=9 ar=1 an=1]" })
 		net:Tick()
 		local sneaky, off = net:Client("Sneaky"), net:Client("Off")
 		-- Officers see notes, so Sneaky isn't an archivist for them; for members the rank gate would pass.

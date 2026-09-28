@@ -158,7 +158,7 @@ function FS:UpdateRoster()
 	for i = 1, IsInGuild() and GuildControlGetNumRanks() or 0 do
 		self.rankNames[i - 1] = GuildControlGetRankName(i)
 	end
-	self.acl, self.aclConfigured = ACL.Parse(IsInGuild() and GetGuildInfoText() or nil)
+	self:RefreshACL()
 	self:SendMessage("FRONTIERSCOUT_ROSTER_UPDATED")
 end
 
@@ -173,7 +173,29 @@ function FS:Member(name)
 	if key then return self.roster[key], key end
 end
 
+-- Reads the thresholds from Guild Info when its text changed. The text can
+-- still be empty right after login; then the last known tag for this guild
+-- (saved) is used, so nobody briefly loses their rights.
+function FS:RefreshACL()
+	local text = IsInGuild() and GetGuildInfoText() or nil
+	local meta = self.store and self.store.bucket.meta
+	if (not text or text == "") and meta and meta.aclText then text = meta.aclText end
+	if not text or text == "" or text == self.aclText then return end
+	self.aclText = text
+	self.acl, self.aclConfigured = ACL.Parse(text)
+	if meta and self.aclConfigured then meta.aclText = text end
+end
+
+-- Why the player is or isn't an archivist, for /fs whoami and /fs debug.
+function FS:ArchivistStatus()
+	local member = self:Member(self:PlayerName())
+	return ("rank %s, archivist rank %s, officer note needed: %s, {FS:A} seen: %s, can read officer notes: %s, archivist: %s"):format(
+		tostring(member and member.rankIndex or self:MyRank()), tostring(self.acl.ar), tostring(self.acl.an == 1),
+		tostring(member and member.officerNoteHasTag), tostring(self:CanViewOfficerNotes()), tostring(self:AmArchivist()))
+end
+
 function FS:IsArchivist(fullName)
+	self:RefreshACL()
 	local member = self:Member(fullName)
 	if fullName == self:PlayerName() and not member then
 		member = { rankIndex = self:MyRank() }
@@ -189,6 +211,7 @@ end
 -- Returns true, or false and "noguild" | "denied".
 function FS:Can(op, entry)
 	if not self.store then return false, "noguild" end
+	self:RefreshACL()
 	local isAuthor = entry ~= nil and entry.author == self:PlayerName()
 	if ACL.CanPropose(self.acl, op, self:MyRank(), isAuthor) then return true end
 	return false, "denied"
@@ -249,6 +272,8 @@ function FS:RefreshGuild()
 	end
 	if self.store then
 		self.store:CollectGarbage(GetServerTime())
+		self.aclText = nil -- re-read for this guild (or use its saved tag)
+		self:RefreshACL()
 	end
 	self:Debug("guild bucket: %s", tostring(key))
 	self:SendMessage("FRONTIERSCOUT_GUILD_CHANGED", key)

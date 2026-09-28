@@ -54,7 +54,6 @@ local ACTION_LABELS = {
 	["do"] = L["Delete their own discoveries"],
 	da = L["Delete anyone's discoveries"],
 	r = L["Report outdated discoveries"],
-	ar = L["Archivists: minimum rank"],
 }
 
 local draft -- thresholds being edited; starts from the guild's current ones
@@ -88,7 +87,7 @@ local function guildSetup()
 			end,
 		},
 	}
-	for i, key in ipairs(ACL.KEYS) do
+	for i, key in ipairs(ACL.RANK_KEYS) do
 		args[key] = {
 			type = "select",
 			order = i,
@@ -100,6 +99,30 @@ local function guildSetup()
 			disabled = function() return not FS.store end,
 		}
 	end
+	args.archivistRanks = {
+		type = "multiselect",
+		order = #ACL.RANK_KEYS + 1,
+		width = "full",
+		name = L["Archivists: ranks that approve discoveries"],
+		values = function()
+			local values = {}
+			for i, name in pairs(FS.rankNames) do values[i] = name end
+			return values
+		end,
+		get = function(_, rank) return ACL.IsArchivistRank(currentDraft(), rank) end,
+		set = function(_, rank, on) ACL.SetArchivistRank(currentDraft(), rank, on) end,
+		disabled = function() return not FS.store end,
+	}
+	args.an = {
+		type = "toggle",
+		order = #ACL.RANK_KEYS + 2,
+		width = "full",
+		name = L["Also require {FS:A} in their officer note"],
+		desc = L["Off: everyone in the archivist ranks is an archivist. On: they also need {FS:A} in their officer note."],
+		get = function() return currentDraft().an == 1 end,
+		set = function(_, v) currentDraft().an = v and 1 or 0 end,
+		disabled = function() return not FS.store end,
+	}
 	-- Addons can't write Guild Info, so the tag is shown for copying.
 	args.tag = {
 		type = "input",
@@ -152,16 +175,20 @@ local function guildSetup()
 		order = 30,
 		fontSize = "medium",
 		name = function()
-			local help = L["Archivists approve discoveries and share them with the guild. To make someone an archivist, add {FS:A} to their officer note (Guild & Communities > Roster). Their rank must also meet the archivist rank above."]
+			local help = FS.acl.an == 1
+				and L["Archivists approve discoveries and share them with the guild. They need an archivist rank above and {FS:A} in their officer note (Guild & Communities > Roster)."]
+				or L["Archivists approve discoveries and share them with the guild: everyone in the archivist ranks above."]
 			local names = FS:ListArchivists()
 			for i, name in ipairs(names) do
-				names[i] = (FS.roster[name].online and "|cff33ff33%s|r" or "%s"):format(Ambiguate(name, "guild"))
+				local online = FS.roster[name].online
+				names[i] = online and ("|cff33ff33%s|r"):format(Ambiguate(name, "guild"))
+					or ("|cff888888%s (%s)|r"):format(Ambiguate(name, "guild"), L["offline"])
 			end
 			local list = #names > 0 and table.concat(names, ", ") or L["none yet"]
 			local text = help .. "\n\n" .. L["Archivists: %s"]:format(list)
 			-- Leadership often forgets its own note: say so.
 			local rank = FS:MyRank()
-			if not FS:AmArchivist() and rank and ACL.Can(FS.acl, "ar", rank) then
+			if FS.acl.an == 1 and not FS:AmArchivist() and rank and ACL.IsArchivistRank(FS.acl, rank) then
 				text = text .. "\n|cffff8800" .. L["You are not an archivist: your rank qualifies, but your own officer note needs {FS:A}. Until then your discoveries go to the archivists for review."] .. "|r"
 			end
 			return text
