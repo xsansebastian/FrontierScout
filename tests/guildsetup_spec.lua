@@ -115,3 +115,14 @@ describe("Guild Setup options", function()
 		assert.matches("Archivists: |cff33ff33Olga", setup(state).archivists.name(), 1, true)
 	end)
 end)
+
+describe("Guild Setup hint for leadership", function()
+	it("tells a qualifying leader without the tag that they aren't an archivist", function()
+		local state = wow.boot({ guild = "Wardens", ui = true, rank = 0, canViewNotes = true,
+			guildInfo = "[FS1 s=9 ar=1]",
+			roster = { { name = "Scout-Realm", rankIndex = 0, officerNote = "", online = true, guid = "Player-1234-0ABCDEF0" } } })
+		state.ns.FS:OnEnable()
+		local text = state.options.FrontierScout().args.guild.args.archivists.name()
+		assert.matches("your own officer note needs {FS:A}", text, 1, true)
+	end)
+end)

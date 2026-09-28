@@ -230,3 +230,4 @@ L["Guild Info doesn't have the tag yet."] = "La información de la hermandad aú
 L["Check again"] = "Comprobar de nuevo"
 L["Reads Guild Info again after you have edited it."] = "Vuelve a leer la información de la hermandad después de editarla."
 L["show how the game names you (for bug reports)"] = "muestra cómo te nombra el juego (para informar de errores)"
+L["You are not an archivist: your rank qualifies, but your own officer note needs {FS:A}. Until then your discoveries go to the archivists for review."] = "No eres archivero: tu rango es suficiente, pero tu propia nota de oficial necesita {FS:A}. Hasta entonces tus descubrimientos van a los archiveros para revisión."

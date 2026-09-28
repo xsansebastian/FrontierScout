@@ -400,12 +400,18 @@ must **ignore unknown categories** rather than error.
    apply it. The proposal is marked decided in `QSYNC`, so other archivists drop it from their queues.
 3. Reject → `REJ` to the author (or held until the author's next `HELLO`).
 
-**Transport on WoW Forever (from the beta):** the small curation messages (`PROP`, `PACK`, `QMISS`,
-`QDEC` to an author) go over **GUILD with a `to` field** instead of a whisper, because whispering
-"Name Surname" names isn't reliable; clients ignore guild messages addressed to someone else. Any
-whisper that fails ("No player named …") switches that player to the same guild fallback. An
-archivist credits a received proposal to its **sender** (server-verified), not to the author name
-inside it, which can differ on Forever and can't be forged this way.
+**Transport on WoW Forever (from the beta):** whispers to "Name Surname" names can't be relied on,
+so:
+- `PROP` is **broadcast on GUILD**: every archivist that hears it queues it, everyone else ignores
+  it. The member doesn't need to know who the archivists are.
+- Small addressed messages (`ARCH` replies, `SYNCREQ`, `WANT`, `BUSY`, `PACK`, `QMISS`, `QDEC` to an
+  author) go over **GUILD with a `to` field**; clients ignore guild messages addressed to someone
+  else (`FS:IsMe` accepts the roster and `UnitFullName` forms, with or without realm).
+- `MANIFEST` and `ENT` (bulk) stay whispers; a member whose manifest doesn't arrive within 30 s
+  asks for the guild channel on the next pull (`SYNCREQ gc=true`), and any whisper that fails
+  ("No player named …") switches that player to the guild channel.
+- An archivist credits a received proposal to its **sender** (server-verified), not to the author
+  name inside it, which can differ on Forever and can't be forged this way.
 
 **Implementation notes (M4)**
 

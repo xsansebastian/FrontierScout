@@ -158,7 +158,13 @@ local function guildSetup()
 				names[i] = (FS.roster[name].online and "|cff33ff33%s|r" or "%s"):format(Ambiguate(name, "guild"))
 			end
 			local list = #names > 0 and table.concat(names, ", ") or L["none yet"]
-			return help .. "\n\n" .. L["Archivists: %s"]:format(list)
+			local text = help .. "\n\n" .. L["Archivists: %s"]:format(list)
+			-- Leadership often forgets its own note: say so.
+			local rank = FS:MyRank()
+			if not FS:AmArchivist() and rank and ACL.Can(FS.acl, "ar", rank) then
+				text = text .. "\n|cffff8800" .. L["You are not an archivist: your rank qualifies, but your own officer note needs {FS:A}. Until then your discoveries go to the archivists for review."] .. "|r"
+			end
+			return text
 		end,
 	}
 	return { type = "group", order = 4, name = L["Guild Setup"], args = args }

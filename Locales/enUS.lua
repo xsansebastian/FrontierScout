@@ -287,3 +287,6 @@ L["Reads Guild Info again after you have edited it."] = true
 
 -- Diagnostics
 L["show how the game names you (for bug reports)"] = true
+
+-- Guild Setup (own tag)
+L["You are not an archivist: your rank qualifies, but your own officer note needs {FS:A}. Until then your discoveries go to the archivists for review."] = true
