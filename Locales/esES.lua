@@ -150,6 +150,7 @@ L["Last sync: %s; archivists online: %s"] = "Última sincronización: %s; archiv
 L["never"] = "nunca"
 L["none seen"] = "ninguno visto"
 L["Sync is paused in combat and instances."] = "La sincronización se pausa en combate y en instancias."
+L["%s has an older FrontierScout that can't exchange data with yours. Ask them to update."] = "%s tiene una versión antigua de FrontierScout que no puede intercambiar datos con la tuya. Pídele que la actualice."
 L["Looking for archivists..."] = "Buscando archiveros..."
 L["No longer valid: %s"] = "Ya no es válido: %s"
 L["Your submission \"%s\" was rejected: %s"] = "Tu envío \"%s\" fue rechazado: %s"

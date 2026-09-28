@@ -10,6 +10,9 @@ ns.Comm = Comm
 
 Comm.PREFIX = "FScout"
 Comm.PROTOCOL = 1
+-- 2: messages for one player are addressed guild messages (PREFIX_TO).
+-- Clients below 2 can't hear them; HELLO / ARCH carry it as `tv`.
+Comm.TRANSPORT = 2
 Comm.MAX_TEXT = 256 * 1024     -- encoded bytes accepted from one message
 Comm.MAX_RAW = 1024 * 1024     -- decompressed bytes
 Comm.RATE_LIMIT, Comm.RATE_WINDOW = 30, 60
@@ -145,6 +148,8 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 		self:Debug("ignored a message from %s: other guild or version", sender)
 		return
 	end
+	-- Older clients put the recipient inside the payload.
+	if msg.to ~= nil and not self:IsMe(msg.to) then return end
 	self:Debug("received %s from %s%s", tostring(msg.t), sender, to and " (to us)" or "")
 	for _, handler in ipairs(handlers[msg.t] or {}) do
 		handler(self, msg, sender, to and "WHISPER" or "GUILD")
