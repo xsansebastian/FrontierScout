@@ -114,18 +114,87 @@ function FS:Send(t, payload, channel, target, prio)
 	return true
 end
 
--- The game can refuse an addon message (e.g. a guild rank that may not talk
--- in guild chat); ChatThrottleLib then drops it silently, so say so in debug.
--- AceComm calls back per chunk with (arg, sent, total, result), where result
--- is a success boolean or a Enum.SendAddonMessageResult code.
-local function sentCallback(t, _, _, result)
+-- The game can refuse an addon message; ChatThrottleLib then drops it
+-- silently, so say so in debug, and resend a refused channel message once over
+-- the guild channel. AceComm calls back per chunk with (arg, sent, total,
+-- result), where result is a success boolean or a Enum.SendAddonMessageResult code.
+local function sentCallback(item, _, _, result)
 	if result == false or (type(result) == "number" and result ~= 0) then
-		FS:Debug("the game didn't send %s (result %s)", tostring(t), tostring(result))
+		FS:Debug("the game didn't send %s over %s (result %s)", tostring(item[6]), tostring(item.via), tostring(result))
+		if item.via == "CHANNEL" and not item.retried then
+			item.retried, item.via = true, "GUILD"
+			FS:SendCommMessage(item[1], item[2], item[3], item[4], item[5], sentCallback, item)
+		end
 	end
 end
 
+-- Private channel ----------------------------------------------------------------
+-- On WoW Forever some players' guild addon messages never reach anyone, with no
+-- error. Every client therefore also joins a hidden channel for its guild and
+-- sends there once joined (the guild channel stays the fallback, and both are
+-- read). Anyone could join a channel, so only senders in the guild roster
+-- are read from it, and messages still carry the guild key.
+Comm.CHANNEL_DELAY = 5 -- joining before the default channels would shift their numbers
+
+-- "FS<club id>" for the guild; another guild key gets a hash.
+function Comm.ChannelName(guildKey)
+	if type(guildKey) ~= "string" then return nil end
+	local id = guildKey:match("^club:(%d+)$")
+	if not id then
+		local h = 5381
+		for i = 1, #guildKey do h = (h * 33 + guildKey:byte(i)) % 4294967296 end
+		id = ("%08x"):format(h)
+	end
+	return "FS" .. id
+end
+
+-- Channel number to send on, or nil while not joined (or sending over the
+-- guild channel only; the channel is still read then).
+function FS:CommChannel()
+	if not self.commChannel or not GetChannelName or self.db.profile.guildChannelOnly then return nil end
+	local index = GetChannelName(self.commChannel)
+	return index and index > 0 and index or nil
+end
+
+local function hideChannel(name)
+	if not ChatFrame_RemoveChannel then return end
+	for i = 1, NUM_CHAT_WINDOWS or 10 do
+		local frame = _G["ChatFrame" .. i]
+		if frame then pcall(ChatFrame_RemoveChannel, frame, name) end
+	end
+end
+
+function FS:JoinCommChannel(guildKey)
+	local name = Comm.ChannelName(guildKey)
+	if self.commChannel and self.commChannel ~= name and LeaveChannelByName then
+		LeaveChannelByName(self.commChannel)
+	end
+	self.commChannel = name
+	if not name or not JoinTemporaryChannel then return end
+	JoinTemporaryChannel(name)
+	hideChannel(name)
+	self:Debug("joined channel %s (number %s)", name, tostring(GetChannelName and GetChannelName(name)))
+end
+
+FS:Listen("FRONTIERSCOUT_GUILD_CHANGED", function(key)
+	if not key then
+		FS:JoinCommChannel(nil)
+	elseif C_Timer then
+		C_Timer.After(Comm.CHANNEL_DELAY, function()
+			if FS.guildKey == key then FS:JoinCommChannel(key) end
+		end)
+	end
+end)
+
 function FS:SendItem(item)
-	self:SendCommMessage(item[1], item[2], item[3], item[4], item[5], sentCallback, item[6])
+	local channel = self:CommChannel()
+	if channel then
+		item.via = "CHANNEL"
+		self:SendCommMessage(item[1], item[2], "CHANNEL", channel, item[5], sentCallback, item)
+	else
+		item.via = "GUILD"
+		self:SendCommMessage(item[1], item[2], item[3], item[4], item[5], sentCallback, item)
+	end
 end
 
 -- Sends one test message straight through the game (bypassing the queue) and
@@ -153,11 +222,21 @@ end
 
 function FS:OnCommReceived(prefix, text, distribution, sender)
 	if (prefix ~= Comm.PREFIX and prefix ~= Comm.PREFIX_TO) or not self.guildKey then return end
-	if distribution ~= "GUILD" then return end
 	sender = Guild.FullName(sender, GetNormalizedRealmName())
 	if not sender or sender == self:PlayerName() then return end
-	-- A guild member we don't know yet: our roster is out of date.
-	if not self:Member(sender) then self:RequestRoster() end
+	if distribution == "CHANNEL" then
+		-- Anyone can join a channel: only guild members count.
+		if not self:Member(sender) then
+			self:RequestRoster()
+			self:Debug("ignored a channel message from %s: not in the guild roster", sender)
+			return
+		end
+	elseif distribution == "GUILD" then
+		-- A guild member we don't know yet: our roster is out of date.
+		if not self:Member(sender) then self:RequestRoster() end
+	else
+		return
+	end
 	local to
 	if prefix == Comm.PREFIX_TO then
 		to, text = Comm.Unaddress(text)
@@ -182,6 +261,9 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 	for _, handler in ipairs(handlers[msg.t] or {}) do
 		handler(self, msg, sender, to and "WHISPER" or "GUILD")
 	end
+	-- Everyone should hear this sender on the channel; record how they reach us.
+	self.heardOn = self.heardOn or {}
+	self.heardOn[sender] = distribution
 end
 
 FS:OnEnableHook(function()

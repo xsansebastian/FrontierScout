@@ -66,10 +66,12 @@ local function newAceAddon(state)
 			function addon:RegisterComm(prefix, method)
 				state.commPrefix, state.commMethod = prefix, method or "OnCommReceived"
 			end
-			-- state.sendResult (e.g. 9, GeneralError) makes the game refuse every message.
+			-- state.sendResult (e.g. 9, GeneralError) makes the game refuse every message;
+			-- state.refuse = { CHANNEL = 8 } only messages on that distribution.
 			function addon:SendCommMessage(prefix, text, distribution, target, prio, callbackFn, callbackArg)
-				if state.sendResult then
-					if callbackFn then callbackFn(callbackArg, #text, #text, state.sendResult) end
+				local refused = state.sendResult or (state.refuse and state.refuse[distribution])
+				if refused then
+					if callbackFn then callbackFn(callbackArg, #text, #text, refused) end
 					return
 				end
 				state.sent[#state.sent + 1] = { prefix = prefix, text = text, distribution = distribution, target = target, prio = prio }
@@ -177,6 +179,23 @@ function M.new(opts)
 			return state.sendResult or 0, prefix, text, distribution
 		end,
 	}
+	-- Chat channels (only with opts.channels): numbers from 5 up.
+	state.channels = {}
+	if opts.channels then
+		env.JoinTemporaryChannel = function(name)
+			if not state.channels[name] then
+				local n = 4
+				for _ in pairs(state.channels) do n = n + 1 end
+				state.channels[name] = n + 1
+			end
+		end
+		env.LeaveChannelByName = function(name) state.channels[name] = nil end
+		env.GetChannelName = function(name)
+			local index = state.channels[name]
+			if index then return index, name end
+			return 0
+		end
+	end
 	env.Enum = { SendAddonMessageResult = { Success = 0, AddonMessageThrottle = 3, NotInGroup = 5, ChannelThrottle = 8,
 		GeneralError = 9 } }
 	env.GetNumGuildMembers = function() return #state.roster end

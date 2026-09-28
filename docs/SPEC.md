@@ -41,7 +41,7 @@ telling guildmates about. Discoveries are:
 | Client | WoW Forever, Mainline 12.x API (`WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`). Beta interface **16001**; the TOC also lists current Retail interfaces so the addon can be tested on Retail. |
 | Lua | 5.1 (WoW flavour), `bit` library available. |
 | Maps | `C_Map` (uiMapID-based). Positions stored as uiMapID + normalized x/y. |
-| Comms | `C_ChatInfo.SendAddonMessage` via AceComm, channel `GUILD` only (messages for one player are addressed, §3.3). |
+| Comms | `C_ChatInfo.SendAddonMessage` via AceComm, on a private guild channel with `GUILD` as fallback (messages for one player are addressed, §3.3). |
 | Waypoints | `C_Map.SetUserWaypoint` + `C_SuperTrack` (native) or TomTom API. |
 | Midnight restrictions | Addon comms and some unit data are restricted in combat / instanced content, and some values can be *secret* (`issecretvalue`). FrontierScout is open-world only and **pauses all sync while `InCombatLockdown()` or `IsInInstance()`** (outgoing messages are queued), and never reads unit data that is secret. See §6.6 on send results. |
 
@@ -119,9 +119,18 @@ FrontierScoutDB = {
 
 - AceComm prefixes (≤16 chars), registered with `C_ChatInfo.RegisterAddonMessagePrefix`:
   **`FScout`** for broadcasts and **`FScoutTo`** for messages to one player.
-- Channel: **`GUILD`** only. Never `WHISPER` (addon whispers to WoW Forever's "Name Surname" names
-  are lost without an error, §4.5) or `PARTY`/`RAID`/custom channels, so only guild members can
-  send data in.
+- Channels: a **private chat channel for the guild** (`FS<club id>`), with **`GUILD`** as the
+  fallback. Never `WHISPER` (addon whispers to WoW Forever's "Name Surname" names are lost without
+  an error, §4.5) or `PARTY`/`RAID`.
+  - In the beta, one player's guild addon messages never reached anyone (no error, allowed to speak
+    in guild chat), while everyone else's reached them. So every client joins the hidden channel
+    (5 s after login, so the default channels keep their numbers), sends there once joined, and
+    reads both. "Send over the guild channel only" in the options sends over `GUILD` instead (the
+    channel is still read), and a message the game refuses on the channel is resent once over `GUILD`.
+  - Anyone can join a chat channel, so a channel message is read only if its sender is in the
+    guild roster (and it still needs the guild key `g`). An outsider who knows the club id could
+    join or grab the channel first, which only denies service: clients that can't join send over
+    `GUILD`, and the option does the same for everyone else.
 - A `FScoutTo` message is `<recipient full name>\001<encoded payload>`. Everyone else skips it
   before rate limiting or decoding; the recipient is matched with `FS:IsMe` (roster and
   `UnitFullName` forms, ignoring realm, spaces and case).
@@ -564,7 +573,8 @@ end
 
 | Threat | Mitigation |
 |---|---|
-| A non-guild player whispers fake data | Whispers are ignored; only `GUILD` messages with the right envelope `g` are read |
+| A non-guild player sends fake data | Whispers are ignored; `GUILD` and private-channel messages need the envelope `g`, and channel senders must be in the guild roster |
+| An outsider joins or takes over the private channel | Their messages are ignored (roster check); a takeover only blocks the channel, and "Send over the guild channel only" falls back to `GUILD` |
 | A member on a modified client broadcasts fake `APPR`/`ENT` | Receivers require the sender to pass the archivist check (§4.4) |
 | An unauthorized rank submits proposals | Archivists re-check the ACL on receipt; clients also hide the UI |
 | A member edits someone else's entry with `eo` rights only | Archivist checks `entry.author == sender` for `eo`/`do` |

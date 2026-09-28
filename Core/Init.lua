@@ -22,6 +22,7 @@ local defaults = {
 	},
 	profile = {
 		debug = false,
+		guildChannelOnly = false, -- don't use the private channel (Comm)
 		waypointMode = "auto", -- "auto" | "native" | "tomtom"
 		worldmap = { enabled = true, scale = 1, cats = { npc = true, location = true, item = true, event = true } },
 		minimap = { enabled = true, scale = 1, edge = false, cats = { npc = true, location = true, item = true, event = true } },
@@ -185,6 +186,11 @@ function commands.whoami(self)
 	self:Print(("Sending: can speak in guild chat: %s | in combat: %s | in instance: %s | test message: %s"):format(
 		tostring(canSpeak), tostring(InCombatLockdown() and true or false), tostring(IsInInstance() and true or false),
 		ns.Comm.Probe()))
+	local heard = {}
+	for sender, how in pairs(self.heardOn or {}) do heard[#heard + 1] = ("%s via %s"):format(sender, how) end
+	table.sort(heard)
+	self:Print(("Channel: %s, number %s | last heard: %s"):format(tostring(self.commChannel),
+		tostring(self:CommChannel() or "not joined"), #heard > 0 and table.concat(heard, ", ") or "nobody"))
 end
 
 function commands.sync(self)

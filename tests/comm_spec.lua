@@ -93,7 +93,7 @@ describe("Comm isolation", function()
 		FS.db.profile.debug = true
 		state.sendResult = 9
 		FS:Send("TEST", {}, "GUILD")
-		assert.matches("the game didn't send TEST (result 9)", table.concat(state.printed, "\n"), 1, true)
+		assert.matches("the game didn't send TEST over GUILD (result 9)", table.concat(state.printed, "\n"), 1, true)
 		state.printed, state.sendResult = {}, nil
 		FS:Send("TEST", {}, "GUILD")
 		assert.is_nil(table.concat(state.printed, "\n"):find("didn't send", 1, true))
