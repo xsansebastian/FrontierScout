@@ -178,7 +178,7 @@ function M.new(opts)
 	-- Timers run when the test calls M.runTimers(state).
 	env.C_Timer = {
 		After = function(delay, fn) state.timers[#state.timers + 1] = { delay = delay, fn = fn } end,
-		NewTicker = function(interval, fn) state.tickers = state.tickers or {} state.tickers[#state.tickers + 1] = fn end,
+		NewTicker = function(_, fn) state.tickers = state.tickers or {} state.tickers[#state.tickers + 1] = fn end,
 	}
 	env.InCombatLockdown = function() return false end
 	env.IsInInstance = function() return false end
