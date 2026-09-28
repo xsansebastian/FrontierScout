@@ -60,19 +60,24 @@ end
 
 local handlers = {}
 local recentWhispers = {} -- whisper target -> GetTime(), to hide "player not found" errors
+local whisperFailed = {}  -- full name -> true: send to them over GUILD instead
 
--- Our whispers to someone who just went offline make the game print "No
--- player named '...' is currently playing." Hide those (they aren't the
--- user's doing) and mark the player offline so nothing is resent to them.
+-- Small messages for one player that go over the guild channel (addressed
+-- with `to`) instead of a whisper: whispering WoW Forever's "Name Surname"
+-- names isn't reliable, and these must arrive.
+Comm.VIA_GUILD = { PROP = true, PACK = true, QMISS = true, QDEC = true }
+
+-- A whisper from us that the game couldn't deliver prints "No player named
+-- '...' is currently playing." Hide it (the user didn't whisper anyone) and
+-- reach that player over the guild channel from now on.
 function Comm.FilterNotFound(_, _, text)
 	if not ERR_CHAT_PLAYER_NOT_FOUND_S or type(text) ~= "string" then return false end
 	for target, at in pairs(recentWhispers) do
 		if GetTime() - at > 10 then
 			recentWhispers[target] = nil
 		elseif text == ERR_CHAT_PLAYER_NOT_FOUND_S:format(target) then
-			local member = FS.roster[Guild.FullName(target, GetNormalizedRealmName())]
-			if member then member.online = false end
-			FS:Debug("whisper to %s failed: not online", target)
+			whisperFailed[Guild.FullName(target, GetNormalizedRealmName())] = true
+			FS:Debug("whisper to %s failed; using the guild channel for them", target)
 			return true
 		end
 	end
@@ -92,7 +97,9 @@ end
 function FS:Send(t, payload, channel, target, prio)
 	if not self.guildKey then return false end
 	payload.v, payload.g, payload.t = Comm.PROTOCOL, self.guildKey, t
-	if channel == "WHISPER" then
+	if channel == "WHISPER" and (Comm.VIA_GUILD[t] or whisperFailed[target]) then
+		payload.to, channel, target = target, "GUILD", nil
+	elseif channel == "WHISPER" then
 		target = Guild.WhisperName(target, GetNormalizedRealmName())
 		recentWhispers[target] = GetTime()
 	end
@@ -123,14 +130,23 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 	-- A guild member we don't know yet: our roster is out of date.
 	if distribution == "GUILD" and not self.roster[sender] then self:RequestRoster() end
 	-- Whispers only from guild members (SPEC §3.3).
-	if distribution == "WHISPER" and not self.roster[sender] then return end
+	if distribution == "WHISPER" and not self.roster[sender] then
+		self:Debug("ignored a whisper from %s: not in the guild roster", sender)
+		return
+	end
 	-- The archivist this client pulls from is exempt: a full sync is many messages.
 	if sender ~= self.syncPartner and not limiter(sender, GetTime()) then
 		self:Debug("rate limit: dropped a message from %s", sender)
 		return
 	end
 	local msg = Comm.Decode(text)
-	if not msg or msg.v ~= Comm.PROTOCOL or msg.g ~= self.guildKey then return end
+	if not msg or msg.v ~= Comm.PROTOCOL or msg.g ~= self.guildKey then
+		self:Debug("ignored a message from %s: other guild or version", sender)
+		return
+	end
+	-- Guild messages addressed to someone else.
+	if msg.to ~= nil and msg.to ~= self:PlayerName() then return end
+	self:Debug("received %s from %s", tostring(msg.t), sender)
 	for _, handler in ipairs(handlers[msg.t] or {}) do
 		handler(self, msg, sender, distribution)
 	end

@@ -310,7 +310,10 @@ local function enqueue(self, raw, from)
 	local b = lists(self)
 	if b.decided[p.pid] then return true, b.decided[p.pid] end
 	if b.queue[p.pid] then return true end
-	if from and p.author ~= from then return false end -- only your own proposals
+	-- A proposal sent to us is by its sender: the server vouches for that
+	-- name, so nobody can submit in someone else's name. (The name the
+	-- author's client put in can differ, e.g. "Name" vs "Name Surname".)
+	if from then p.author = from end
 	local ok, why = self:ProposalAllowed(p)
 	if not ok then
 		self:Debug("dropped proposal %s from %s: %s", p.pid, tostring(from), why)
@@ -327,7 +330,10 @@ end
 FS:OnMessageType("PROP", function(self, msg, sender)
 	if not self.store or not self:AmArchivist() then return end
 	local ok, decision = enqueue(self, msg.p, sender)
-	if not ok then return end
+	if not ok then
+		self:Debug("dropped a proposal from %s (invalid, not allowed, or queue full)", sender)
+		return
+	end
 	self:Send("PACK", { pid = msg.p.pid }, "WHISPER", sender, "ALERT")
 	if decision then
 		self:Send("QDEC", { pid = msg.p.pid, s = decision.status, r = decision.reason, e = decision.eid, a = decision.author },

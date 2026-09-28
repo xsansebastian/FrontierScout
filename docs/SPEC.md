@@ -400,6 +400,13 @@ must **ignore unknown categories** rather than error.
    apply it. The proposal is marked decided in `QSYNC`, so other archivists drop it from their queues.
 3. Reject → `REJ` to the author (or held until the author's next `HELLO`).
 
+**Transport on WoW Forever (from the beta):** the small curation messages (`PROP`, `PACK`, `QMISS`,
+`QDEC` to an author) go over **GUILD with a `to` field** instead of a whisper, because whispering
+"Name Surname" names isn't reliable; clients ignore guild messages addressed to someone else. Any
+whisper that fails ("No player named …") switches that player to the same guild fallback. An
+archivist credits a received proposal to its **sender** (server-verified), not to the author name
+inside it, which can differ on Forever and can't be forged this way.
+
 **Implementation notes (M4)**
 
 - An archivist answers a `HELLO` with a whispered `ARCH`, so a login doesn't make every archivist
