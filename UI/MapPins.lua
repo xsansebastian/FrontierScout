@@ -1,8 +1,9 @@
 local _, ns = ...
 
 -- World map and minimap pins through HereBeDragons-Pins (docs/SPEC.md §7.1-7.2).
--- Only the entries of the shown continent (world map) or the player's zone
--- (minimap) get pin frames, so a large atlas stays cheap.
+-- Only the entries of the shown zone (or continent, when a continent map is
+-- shown) and of the player's zone (minimap) get pin frames, so a large atlas
+-- stays cheap.
 local FS, L = ns.FS, ns.L
 local Query, Icons = ns.Query, ns.Icons
 
@@ -27,6 +28,11 @@ function FS:EntryMenu(owner, e)
 		root:CreateButton(L["Show in browser"], function() self:SelectEntry(e.id) end)
 		if self:Can("edit", e) then
 			root:CreateButton(L["Edit"], function() self:OpenEditor(e.id) end)
+		end
+		if self:Can("report", e) then
+			root:CreateButton(L["Report outdated"], function()
+				StaticPopup_Show("FRONTIERSCOUT_REPORT", e.title, nil, e.id)
+			end)
 		end
 		if self:Can("delete", e) then
 			root:CreateButton(L["Delete"], function()
@@ -112,7 +118,9 @@ end
 local function refresh(kind, map, force)
 	local settings = FS.db.profile[kind == "world" and "worldmap" or "minimap"]
 	local store = FS.store
-	local scope = kind == "world" and "continent" or "zone"
+	-- The world map needs the whole continent only when a continent is shown;
+	-- a zone shows its own pins (and its caves'), so fewer frames are built.
+	local scope = (kind == "world" and map and ns.Maps.Type(map) == 2) and "continent" or "zone"
 	local area = map and (scope == "continent" and ns.Maps.Continent(map) or ns.Maps.Zone(map))
 	if area == 0 then area = ns.Maps.Zone(map) end
 	local key = store and settings.enabled and area and (FS.guildKey .. ":" .. area)

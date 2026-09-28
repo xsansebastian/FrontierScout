@@ -62,9 +62,10 @@ local handlers = {}
 local limiter = Comm.NewRateLimiter(Comm.RATE_LIMIT, Comm.RATE_WINDOW)
 local queue = {}
 
--- handler(FS, msg, sender, distribution) for message type `t`.
+-- Adds handler(FS, msg, sender, distribution) for message type `t`.
 function FS:OnMessageType(t, handler)
-	handlers[t] = handler
+	handlers[t] = handlers[t] or {}
+	table.insert(handlers[t], handler)
 end
 
 -- Sends message type `t` with `payload` fields on GUILD or WHISPER (to
@@ -105,8 +106,9 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 	end
 	local msg = Comm.Decode(text)
 	if not msg or msg.v ~= Comm.PROTOCOL or msg.g ~= self.guildKey then return end
-	local handler = handlers[msg.t]
-	if handler then handler(self, msg, sender, distribution) end
+	for _, handler in ipairs(handlers[msg.t] or {}) do
+		handler(self, msg, sender, distribution)
+	end
 end
 
 FS:OnEnableHook(function()

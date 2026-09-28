@@ -39,6 +39,35 @@ local function after(delay, fn)
 	if C_Timer then C_Timer.After(delay, fn) end
 end
 
+-- Trust --------------------------------------------------------------------------
+
+local warned = {}
+
+-- Does `sender` pass the archivist check? Officers who can read officer notes
+-- get a warning when an untagged officer-rank player serves data (SPEC §4.4).
+local function trusted(self, sender, what)
+	if self:IsArchivist(sender) then return true end
+	local member = self.roster[sender]
+	if member and self:CanViewOfficerNotes() and ns.ACL.Can(self.acl, "ar", member.rankIndex) and not warned[sender] then
+		warned[sender] = true
+		self:Warn(L["%s sent %s but has no {FS:A} officer-note tag; ignored."], Ambiguate(sender, "guild"), what)
+	end
+	return false
+end
+
+function FS:Warn(fmt, ...)
+	if not self.store then return end
+	local b = self.store.bucket
+	b.warnings = b.warnings or {}
+	table.insert(b.warnings, date("%m-%d %H:%M ") .. fmt:format(...))
+	while #b.warnings > 20 do table.remove(b.warnings, 1) end
+	self:Debug(fmt, ...)
+end
+
+function FS:Warnings()
+	return self.store and self.store.bucket.warnings or {}
+end
+
 -- Pulling ------------------------------------------------------------------------
 
 local function finishPull(self, ok)
@@ -75,7 +104,12 @@ function FS:SayHello(force)
 	if not force and sync.lastHello and now() - sync.lastHello < HELLO_THROTTLE then return false end
 	sync.lastHello = now()
 	local d = digest(self)
-	self:Send("HELLO", { root = d:Root(), count = d.count, role = self:AmArchivist() and "A" or "M" }, "GUILD", nil, "ALERT")
+	self:Send("HELLO", {
+		root = d:Root(),
+		count = d.count,
+		role = self:AmArchivist() and "A" or "M",
+		open = self.OpenProposals and self:OpenProposals() or nil,
+	}, "GUILD", nil, "ALERT")
 	return true
 end
 
@@ -97,7 +131,7 @@ FS:OnMessageType("HELLO", function(self, msg, sender)
 end)
 
 FS:OnMessageType("ARCH", function(self, msg, sender)
-	if not self.store or not self:IsArchivist(sender) then return end
+	if not self.store or not trusted(self, sender, "ARCH") then return end
 	sync.archivists[sender] = { root = msg.root, count = tonumber(msg.count) or 0, seen = now() }
 	if msg.root ~= digest(self):Root() then startPull(self, sender) end
 end)
@@ -120,7 +154,7 @@ end)
 
 FS:OnMessageType("MANIFEST", function(self, msg, sender)
 	if not self.store or sender ~= self.syncPartner or type(msg.m) ~= "table" then return end
-	if not self:IsArchivist(sender) then return end
+	if not trusted(self, sender, "MANIFEST") then return end
 	local stale = self.store:Stale(msg.m, GetServerTime())
 	for _, id in ipairs(stale) do self.store:Forget(id) end
 	if #stale > 0 then self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED") end
@@ -161,17 +195,25 @@ FS:OnMessageType("WANT", function(self, msg, sender)
 end)
 
 -- Applies canonical entries from an archivist; returns how many were new.
+-- Announces entries that are new here (not edits or deletions) with
+-- FRONTIERSCOUT_ENTRIES_RECEIVED, for notifications.
 local function applyAll(self, list)
-	local applied = 0
+	local applied, fresh = 0, {}
 	for _, e in ipairs(list) do
-		if self.store:Apply(e) then applied = applied + 1 end
+		local existed = type(e) == "table" and self.store:Get(e.id) ~= nil
+		local stored = self.store:Apply(e)
+		if stored then
+			applied = applied + 1
+			if not existed and not stored.deleted then fresh[#fresh + 1] = stored end
+		end
 	end
 	if applied > 0 then self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED") end
+	if #fresh > 0 then self:SendMessage("FRONTIERSCOUT_ENTRIES_RECEIVED", fresh) end
 	return applied
 end
 
 FS:OnMessageType("ENT", function(self, msg, sender)
-	if not self.store or type(msg.e) ~= "table" or not self:IsArchivist(sender) then return end
+	if not self.store or type(msg.e) ~= "table" or not trusted(self, sender, "ENT") then return end
 	applyAll(self, msg.e)
 	if sender == self.syncPartner then
 		sync.partnerAt = now()
@@ -180,7 +222,7 @@ FS:OnMessageType("ENT", function(self, msg, sender)
 end)
 
 FS:OnMessageType("APPR", function(self, msg, sender)
-	if not self.store or type(msg.e) ~= "table" or not self:IsArchivist(sender) then return end
+	if not self.store or type(msg.e) ~= "table" or not trusted(self, sender, "APPR") then return end
 	applyAll(self, { msg.e })
 end)
 
@@ -209,6 +251,7 @@ end)
 -- Lifecycle ---------------------------------------------------------------------------
 
 local function reset()
+	wipe(warned)
 	wipe(sync.archivists)
 	wipe(sync.serving)
 	sync.lastHello = nil

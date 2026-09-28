@@ -91,12 +91,19 @@ local function newAceAddon(state)
 	}
 end
 
-local function newAceLocale()
+-- Like AceLocale: NewLocale returns a table for the default locale and the
+-- client's (`clientLocale`), nil otherwise; the client's strings win.
+local function newAceLocale(clientLocale)
 	local locales = {}
 	return {
-		NewLocale = function(_, app)
-			locales[app] = setmetatable({}, {
-				__newindex = function(t, k, v) rawset(t, k, v == true and k or v) end,
+		NewLocale = function(_, app, locale, isDefault)
+			if not isDefault and locale ~= clientLocale then return nil end
+			local existing = locales[app]
+			locales[app] = setmetatable(existing or {}, {
+				__newindex = function(t, k, v)
+					if isDefault and rawget(t, k) ~= nil then return end
+					rawset(t, k, v == true and k or v)
+				end,
 			})
 			return locales[app]
 		end,
@@ -118,7 +125,7 @@ function M.new(opts)
 	local libs = {
 		["AceAddon-3.0"] = newAceAddon(state),
 		["AceDB-3.0"] = newAceDB(env),
-		["AceLocale-3.0"] = newAceLocale(),
+		["AceLocale-3.0"] = newAceLocale(opts.locale or "enUS"),
 		["AceSerializer-3.0"] = loadRealLibs()["AceSerializer-3.0"],
 		LibDeflate = loadRealLibs().LibDeflate,
 		-- Coordinate translation is set per test through state.translate(x, y, fromMap, toMap).
@@ -139,6 +146,7 @@ function M.new(opts)
 		end,
 	}
 	env.date = os.date
+	env.Ambiguate = function(name) return (name:gsub("%-.*", "")) end
 	env.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 	env.GetServerTime = function() return opts.now or 1790000000 end
 	env.GetBuildInfo = function() return "1.60.1", "70009", "Sep 25 2026", 16001 end

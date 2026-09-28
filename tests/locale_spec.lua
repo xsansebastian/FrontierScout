@@ -29,3 +29,49 @@ describe("Locales/enUS.lua", function()
 		assert.same({}, missing)
 	end)
 end)
+
+describe("Locales/esES.lua", function()
+	local function defined(path)
+		local out, order = {}, {}
+		for line in readAll(path):gmatch("[^\n]+") do
+			local key, value = line:match('^L%["(.-[^\\])"%] = (.*)$')
+			if key then
+				out[key] = value
+				order[#order + 1] = key
+			end
+		end
+		return out, order
+	end
+
+	local function placeholders(s)
+		local list = {}
+		for p in s:gmatch("%%%-?%d*%a") do list[#list + 1] = p end
+		return table.concat(list, " ")
+	end
+
+	it("translates every English string, with the same placeholders", function()
+		local en, order = defined("Locales/enUS.lua")
+		local es = defined("Locales/esES.lua")
+		local problems = {}
+		for _, key in ipairs(order) do
+			local value = es[key]
+			if not value then
+				problems[#problems + 1] = "missing: " .. key
+			elseif placeholders(value) ~= placeholders(key) then
+				problems[#problems + 1] = "placeholders: " .. key
+			end
+		end
+		for key in pairs(es) do
+			if not en[key] then problems[#problems + 1] = "unknown key: " .. key end
+		end
+		assert.same({}, problems)
+	end)
+
+	it("is used on Spanish clients", function()
+		local wow = require("tests.helpers.wow")
+		local state, _, ns = wow.boot({ locale = "esES", guild = "Hermandad" })
+		wow.slash(state, "status")
+		assert.matches("Hermandad: Hermandad", table.concat(state.printed, "\n"), 1, true)
+		assert.equals("Tesoro", ns.Categories.Label("treasure"))
+	end)
+end)

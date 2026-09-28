@@ -86,7 +86,7 @@ function M.install(env, state)
 	env.StaticPopupDialogs = {}
 	state.popups = {}
 	env.StaticPopup_Show = function(which, a, b, data) state.popups[#state.popups + 1] = { which, a, b, data } end
-	env.YES, env.NO = "Yes", "No"
+	env.YES, env.NO, env.CANCEL = "Yes", "No", "Cancel"
 	env.Ambiguate = function(name) return (name:gsub("%-.*", "")) end
 	env.C_Texture = { GetAtlasInfo = function() return nil end }
 	env.C_Item = { GetItemInfo = function(id) return "Item " .. id, "[Item " .. id .. "]" end }

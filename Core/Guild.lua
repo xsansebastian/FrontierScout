@@ -176,6 +176,11 @@ function FS:RefreshGuild()
 	if key == self.guildKey then return end
 	self.guildKey = key
 	self.store = bucket and Store.New(bucket) or nil
+	if bucket then
+		-- "New since last login" compares against the previous session's start.
+		self.newSince = bucket.meta.sessionStart or 0
+		bucket.meta.sessionStart = GetServerTime()
+	end
 	if self.store then
 		self.store:CollectGarbage(GetServerTime())
 	end

@@ -119,8 +119,14 @@ end
 
 function Store.New(bucket)
 	bucket.entries = bucket.entries or {}
-	return setmetatable({ bucket = bucket, digest = Digest.New(bucket.entries) }, Store)
+	local live = 0
+	for _, e in pairs(bucket.entries) do
+		if not e.deleted then live = live + 1 end
+	end
+	return setmetatable({ bucket = bucket, digest = Digest.New(bucket.entries), live = live }, Store)
 end
+
+local function isLive(e) return e ~= nil and not e.deleted end
 
 -- Conflict rule (SPEC §6.2): higher rev, then later approvedAt, then the
 -- lexically greater approvedBy wins. Is `a` newer than `b`?
@@ -132,6 +138,8 @@ function Store.Newer(a, b)
 end
 
 local function put(self, e)
+	local old = self.bucket.entries[e.id]
+	self.live = self.live + (isLive(e) and 1 or 0) - (isLive(old) and 1 or 0)
 	self.bucket.entries[e.id] = e
 	self.digest:Set(e)
 end
@@ -192,6 +200,7 @@ function Store:Stale(manifest, now)
 end
 
 function Store:Forget(id)
+	if isLive(self.bucket.entries[id]) then self.live = self.live - 1 end
 	self.bucket.entries[id] = nil
 	self.digest:Remove(id)
 end
@@ -217,11 +226,7 @@ function Store:All()
 end
 
 function Store:Count()
-	local n = 0
-	for _, e in pairs(self.bucket.entries) do
-		if not e.deleted then n = n + 1 end
-	end
-	return n
+	return self.live
 end
 
 -- Adds a new approved entry. Returns it, or nil and an error code
@@ -307,13 +312,19 @@ local function context(self)
 	}
 end
 
--- Creates (id == nil) or updates an entry in the active guild. Until curation
--- arrives (M5) every write is applied locally and approved by its writer.
--- Returns the entry, or nil and an error code.
+-- Creates (id == nil) or updates an entry in the active guild. Archivists'
+-- writes are approved on the spot; everyone else's become proposals for the
+-- review queue (SPEC §5.4). Returns the entry (archivist) or the proposal
+-- (has .pid), or nil and an error code.
 function FS:SaveEntry(id, data)
 	local store = self:GetStore()
 	if not store then return nil, "noguild" end
 	if not self:Can(id and "edit" or "create", id and store:Get(id)) then return nil, "denied" end
+	if not self:AmArchivist() then
+		local ok, err = Store.Validate(data)
+		if not ok then return nil, err end
+		return self:Propose(id and "edit" or "create", id, data)
+	end
 	local ctx = context(self)
 	local entry, err
 	if id then
@@ -328,10 +339,12 @@ function FS:SaveEntry(id, data)
 	return entry, err
 end
 
-function FS:DeleteEntry(id)
+-- Deletes (archivist) or proposes deleting (everyone else) an entry.
+function FS:DeleteEntry(id, reason)
 	local store = self:GetStore()
 	if not store then return nil, "noguild" end
 	if not self:Can("delete", store:Get(id)) then return nil, "denied" end
+	if not self:AmArchivist() then return self:Propose("delete", id, nil, reason) end
 	local t, err = store:Delete(id, context(self))
 	if t then
 		self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED", id)
