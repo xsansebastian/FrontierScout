@@ -103,3 +103,32 @@ describe("FS:RefreshGuild", function()
 		assert.is_nil(FS.db.global.guilds["name:Realm:Wardens"].entries.old)
 	end)
 end)
+
+describe("Roster loading", function()
+	it("asks with the old GuildRoster() when C_GuildInfo.GuildRoster is missing", function()
+		local state, FS = wow.boot({ guild = "Wardens" })
+		state.env.C_GuildInfo = { CanViewOfficerNote = function() return false end }
+		local asked = 0
+		state.env.GuildRoster = function() asked = asked + 1 end
+		FS:RequestRoster()
+		assert.equals(1, asked)
+	end)
+
+	it("asks again while the roster is still empty", function()
+		local state, FS = wow.boot({ guild = "Wardens" })
+		FS:OnEnable()
+		local before = state.rosterRequests
+		state.time = 2000
+		wow.runTimers(state)
+		assert.equals(before + 1, state.rosterRequests)
+	end)
+
+	it("refreshes the roster when an unknown guild member talks", function()
+		local state, FS, ns = wow.boot({ guild = "Wardens" })
+		FS:OnEnable()
+		local before = state.rosterRequests
+		state.time = 3000
+		FS:OnCommReceived(ns.Comm.PREFIX, ns.Comm.Encode({ v = 1, g = FS.guildKey, t = "HELLO" }), "GUILD", "Newcomer")
+		assert.equals(before + 1, state.rosterRequests)
+	end)
+end)

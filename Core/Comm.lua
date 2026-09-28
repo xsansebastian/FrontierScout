@@ -120,6 +120,8 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 	if distribution ~= "GUILD" and distribution ~= "WHISPER" then return end
 	sender = Guild.FullName(sender, GetNormalizedRealmName())
 	if not sender or sender == self:PlayerName() then return end
+	-- A guild member we don't know yet: our roster is out of date.
+	if distribution == "GUILD" and not self.roster[sender] then self:RequestRoster() end
 	-- Whispers only from guild members (SPEC §3.3).
 	if distribution == "WHISPER" and not self.roster[sender] then return end
 	-- The archivist this client pulls from is exempt: a full sync is many messages.

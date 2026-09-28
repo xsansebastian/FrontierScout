@@ -279,6 +279,16 @@ FS:OnEnableHook(function()
 	end
 end)
 
+-- Archivists that answered or announced themselves recently (so are online).
+function FS:SeenArchivists()
+	local list = {}
+	for name, info in pairs(sync.archivists) do
+		if now() - info.seen < BEACON_INTERVAL + 60 and self:IsArchivist(name) then list[#list + 1] = name end
+	end
+	table.sort(list)
+	return list
+end
+
 -- Status for /fs status and the browser.
 function FS:SyncStatus()
 	local online = {}

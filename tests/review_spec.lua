@@ -127,16 +127,33 @@ describe("Curation over the guild network", function()
 	it("keeps submissions until an archivist comes online", function()
 		local net = network()
 		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		arch.offline = true
 		mem.state.roster[1].online = false -- Arch is first in the roster
 		wow.fire(mem.state, "GUILD_ROSTER_UPDATE")
 		local p = mem.FS:SaveEntry(nil, data("Patient"))
 		net:Flush()
 		assert.equals("waiting", mine(mem, p.pid).status)
 		assert.equals(0, #arch.FS:QueueList())
+		-- Arch logs in; the member's roster notices a minute later.
+		arch.offline = false
+		mem.state.time = 2000
 		mem.state.roster[1].online = true
 		wow.fire(mem.state, "GUILD_ROSTER_UPDATE")
 		net:Flush()
 		assert.equals("queued", mine(mem, p.pid).status)
+	end)
+
+	it("sends to an archivist that answered even when the roster says offline", function()
+		local net = network()
+		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		mem.state.roster[1].online = false -- stale roster: Arch is actually online
+		wow.fire(mem.state, "GUILD_ROSTER_UPDATE")
+		mem.FS:SayHello(true) -- Arch answers with ARCH
+		net:Flush()
+		local p = mem.FS:SaveEntry(nil, data("Seen"))
+		net:Flush()
+		assert.equals("queued", mine(mem, p.pid).status)
+		assert.equals(1, #arch.FS:QueueList())
 	end)
 
 	it("archivists drop forged and unauthorized proposals", function()

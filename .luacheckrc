@@ -49,6 +49,7 @@ read_globals = {
 	"GetTime",
 	"GuildControlGetNumRanks",
 	"GuildControlGetRankName",
+	"GuildRoster",
 	"HBD_PINS_WORLDMAP_SHOW_CONTINENT",
 	"hooksecurefunc",
 	"InCombatLockdown",

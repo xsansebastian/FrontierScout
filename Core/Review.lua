@@ -94,6 +94,12 @@ function FS:OnlineArchivists()
 		local isMe = member == me or (info.guid ~= nil and info.guid == myGuid)
 		if info.online and not isMe and self:IsArchivist(member) then list[#list + 1] = member end
 	end
+	-- Archivists who just answered us are online even if the roster lags behind.
+	local listed = {}
+	for _, member in ipairs(list) do listed[member] = true end
+	for _, member in ipairs(self.SeenArchivists and self:SeenArchivists() or {}) do
+		if not listed[member] and member ~= me then list[#list + 1] = member end
+	end
 	table.sort(list)
 	return list
 end
