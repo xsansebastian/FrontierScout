@@ -56,14 +56,17 @@ telling guildmates about. Discoveries are:
 | AceSerializer-3.0 | Table serialization |
 | LibDeflate | Compression + addon-channel-safe encoding |
 | HereBeDragons-2.0, HereBeDragons-Pins-2.0 | World map and minimap pins, coordinate translation |
-| LibDataBroker-1.1, LibDBIcon-1.0 | Minimap / broker launcher. *Not vendored yet: decide in M1 between these and the native Addon Compartment.* |
-| AceConfig-3.0, AceConfigDialog-3.0, AceGUI-3.0 | Options panel only |
+| AceConfig-3.0, AceConfigDialog-3.0, AceGUI-3.0 | Options panel and the add/edit form |
 
 Libraries are **vendored** in `Libs/` from pinned upstream revisions by `scripts/update-libs.sh`
 (see `Libs/README.md`), so the repository folder can be dropped into `Interface/AddOns` as-is.
 
 The browser window and map side panel use native frames (`ScrollBox` + `DataProvider`) for
 performance.
+
+**Launcher (decided in M1):** the native **Addon Compartment** (`## AddonCompartmentFunc` in the
+TOC) plus key bindings (`Bindings.xml`), so no LibDataBroker / LibDBIcon. A standalone minimap
+button can be added in M6 if beta testers ask for one.
 
 ---
 
@@ -432,8 +435,11 @@ Tabs:
 
 ### 7.5 Add / Edit dialog
 
-- Entry points: browser "New", map right-click "Add discovery here", `/fs add`, and a
-  **"Scout this"** button in target / merchant context (only for NPC / vendor subtypes).
+- Entry points: browser "New", map right-click "Add discovery here" (M2), `/fs add` and its key
+  binding (uses the current target when there is one), and a **Scout** button on the merchant
+  window (vendor + stock).
+- Item links: shift-click an item while the description or items field has focus. Items are one
+  per line, `<item link or ID> = <cost>`.
 - Pre-fill: position, zone, target npcID/name, vendor stock, item link from cursor.
 - Fields adapt to the category. Validation: title required, length limits.
 - Buttons are disabled with a tooltip explaining the ACL when the player lacks the right.
@@ -447,9 +453,10 @@ Tabs:
 
 ### 7.7 Launcher & commands
 
-- LibDBIcon minimap button + LDB launcher (left-click: browser, right-click: options).
-- `/fs` browser, `/fs add` new at player position, `/fs sync` force sync, `/fs config` options,
-  `/fs debug` toggle debug log.
+- Addon Compartment entry (opens the browser) and two key bindings: toggle the browser, record a
+  discovery here.
+- `/fs` browser, `/fs add [title]` new at player position, `/fs waypoints auto|native|tomtom`,
+  `/fs sync` force sync (M4), `/fs config` options (M3), `/fs debug` toggle debug log.
 
 ### 7.8 Options
 
@@ -511,13 +518,17 @@ trust anchors cover the realistic threats.
 FrontierScout/
   FrontierScout.toc
   embeds.xml
+  Bindings.xml               -- key bindings (browser, record a discovery)
   Libs/                      -- vendored libraries (§2.1), see Libs/README.md
   Locales/enUS.lua           -- AceLocale-ready (esES etc. later)
   Core/
     Init.lua                 -- AceAddon, DB defaults, slash commands
+    Categories.lua           -- categories, subtypes, labels (§5.2)
+    Format.lua               -- text sanitizing, coordinates, money, item/tag lists
     Guild.lua                -- guildKey, roster cache, events
     ACL.lua                  -- Guild Info tag parse/write, rank checks, archivist check
     Store.lua                -- entries, proposals, tombstones, GC, validation
+    Query.lua                -- search, filters, Continent -> Zone grouping
     Digest.lua               -- FNV-1a, 64-bucket digest
     Comm.lua                 -- envelope, send/recv, rate limit, pause rules
     Sync.lua                 -- HELLO/ARCH/SYNCREQ/MANIFEST/WANT/ENT
@@ -536,7 +547,8 @@ FrontierScout/
   .pkgmeta                   -- BigWigs packager
   scripts/update-libs.sh     -- re-vendors Libs/ from pinned revisions
   .luacheckrc
-  tests/                     -- busted specs for pure-Lua modules (ACL, Digest, Store, Sync state machine)
+  tests/                     -- busted specs: pure modules, WoW-facing modules on API stubs,
+                             -- UI smoke tests on fake frames (tests/helpers/)
 ```
 
 Pure logic (ACL parsing, digest, store, conflict resolution, sync state machine) is kept free of
@@ -549,7 +561,7 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
 | # | Milestone | Scope | Exit criteria |
 |---|---|---|---|
 | M0 | Scaffold | TOC, libs, DB, slash cmd, luacheck/busted CI | Loads on Forever beta with no Lua errors |
-| M1 | Local atlas | Store, capture, edit dialog, browser (Discoveries tab), waypoints | Can create, browse and waypoint local entries |
+| M1 | Local atlas | Store, capture, edit dialog, browser (Discoveries tab), waypoints | Can create, browse and waypoint local entries. *Until M5, every write goes straight into the local canonical set, approved by its writer.* |
 | M2 | Map surfaces | World map pins, minimap pins, side panel, tooltips, filters | Entries visible on all four surfaces |
 | M3 | Guild & ACL | guildKey isolation, roster cache, Guild Info tag, officer-note archivists, Guild Setup UI | ACL correctly gates UI in a 3-rank test guild |
 | M4 | Sync | Digest, HELLO/ARCH, SYNCREQ…ENT, APPR live push | Two clients converge from empty and after divergent edits |
@@ -569,3 +581,8 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
 4. Whether `C_Map.CanSetUserWaypointOnMap` is true for all Forever zones.
 5. Which Blizzard atlas icons exist for categories (fall back to bundled TGAs if needed).
 6. Guild Info text length limit on Forever, to confirm there's room for the tag.
+7. Merchant window API on Forever: `C_MerchantFrame.GetItemInfo` vs. the older
+   `GetMerchantItemInfo` (both handled), and whether the **Scout** button at the top right of
+   `MerchantFrame` overlaps anything.
+8. Shift-click link insertion: which of `ChatFrameUtil.InsertLink` / `ChatEdit_InsertLink` the
+   client calls (the dialog hooks whichever exists).

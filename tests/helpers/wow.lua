@@ -48,6 +48,18 @@ local function newAceAddon(state)
 			function addon:Print(msg)
 				state.printed[#state.printed + 1] = msg
 			end
+			-- AceEvent subset: records registrations, delivers messages.
+			function addon:RegisterEvent(event, handler)
+				state.events[event] = handler or event
+			end
+			function addon:RegisterMessage(message, handler)
+				state.messageHandlers[message] = handler
+			end
+			function addon:SendMessage(message, ...)
+				state.messages[#state.messages + 1] = { message, ... }
+				local handler = state.messageHandlers[message]
+				if type(handler) == "function" then handler(message, ...) end
+			end
 			-- AceConsole:GetArgs subset: first whitespace-separated word.
 			function addon:GetArgs(input)
 				return (input or ""):match("^%s*(%S+)")
@@ -78,14 +90,21 @@ end
 -- `opts.guild` sets the player's guild name (nil = unguilded).
 function M.new(opts)
 	opts = opts or {}
-	local state = { chatCommands = {}, printed = {} }
+	local state = { chatCommands = {}, printed = {}, events = {}, messages = {}, messageHandlers = {} }
 	local env = setmetatable({}, { __index = _G })
 
 	local libs = {
 		["AceAddon-3.0"] = newAceAddon(state),
 		["AceDB-3.0"] = newAceDB(env),
 		["AceLocale-3.0"] = newAceLocale(),
+		-- Coordinate translation is set per test through state.translate(x, y, fromMap, toMap).
+		["HereBeDragons-2.0"] = {
+			TranslateZoneCoordinates = function(_, x, y, from, to)
+				if state.translate then return state.translate(x, y, from, to) end
+			end,
+		},
 	}
+	state.libs = libs
 	env.LibStub = setmetatable({}, {
 		__call = function(_, major) return assert(libs[major], "missing lib stub " .. major) end,
 	})
@@ -100,6 +119,12 @@ function M.new(opts)
 	env.GetBuildInfo = function() return "1.60.1", "70009", "Sep 25 2026", 16001 end
 	env.IsInGuild = function() return opts.guild ~= nil end
 	env.GetGuildInfo = function() return opts.guild end
+	env.GetNormalizedRealmName = function() return "Realm" end
+	env.C_Club = { GetGuildClubId = function() return opts.clubId end }
+	env.UnitFullName = function() return "Scout", "Realm" end
+	env.UnitGUID = function(unit) if unit == "player" then return "Player-1234-0ABCDEF0" end end
+	env.InCombatLockdown = function() return false end
+	env.IsInInstance = function() return false end
 
 	state.env = env
 	state.ns = {}
@@ -114,6 +139,30 @@ function M.load(state, files)
 		chunk(ADDON_NAME, state.ns)
 	end
 	return state.ns
+end
+
+-- Addon files in TOC order, read from FrontierScout.toc: Locales + Core,
+-- plus UI when `withUI`.
+function M.coreFiles(withUI)
+	local files = {}
+	for line in io.lines("FrontierScout.toc") do
+		local path = line:match("^%s*((%a+)\\[^%s]+%.lua)%s*$")
+		if path and (path:find("^Locales") or path:find("^Core") or (withUI and path:find("^UI"))) then
+			files[#files + 1] = (path:gsub("\\", "/"))
+		end
+	end
+	return files
+end
+
+-- Loads Locales + Core (and UI with opts.ui, on fake frames) and runs
+-- OnInitialize; returns state, FS, ns.
+function M.boot(opts)
+	local state = M.new(opts)
+	if opts and opts.ui then require("tests.helpers.frames").install(state.env, state) end
+	local ns = M.load(state, M.coreFiles(opts and opts.ui))
+	ns.FS:OnInitialize()
+	state.printed = {}
+	return state, ns.FS, ns
 end
 
 -- Runs a slash command the way WoW would (e.g. "status").

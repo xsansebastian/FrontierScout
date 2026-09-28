@@ -1,0 +1,8 @@
+<Bindings>
+	<Binding name="FRONTIERSCOUT_BROWSER" header="FRONTIERSCOUT" category="ADDONS">
+		FrontierScout_ToggleBinding()
+	</Binding>
+	<Binding name="FRONTIERSCOUT_ADD" category="ADDONS">
+		FrontierScout_AddBinding()
+	</Binding>
+</Bindings>

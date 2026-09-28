@@ -3,7 +3,8 @@ Crowdsourced discovery addon for World of Warcraft: Forever. Automatically recor
 
 ## Status
 
-Milestone **M0 (scaffold)**: the addon loads, keeps its saved data and answers slash commands.
+Milestone **M1 (local atlas)**: record discoveries, browse them by zone and set waypoints.
+Discoveries are stored per guild, but they are **not shared yet**: guild sync arrives in M4.
 See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
 
 ## Install (development build)
@@ -13,14 +14,30 @@ See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
 2. Start the game and enable **FrontierScout** in the AddOns list.
 3. Type `/fs status` in chat.
 
+## Using it
+
+- **Record a discovery:** stand on the spot and type `/fs add` (or `/fs add Hidden cave` to pre-fill
+  the title). With an NPC targeted, the NPC and its ID are pre-filled. At a vendor, click
+  **Scout** at the top of the merchant window to record the vendor with its stock.
+- **Browse:** `/fs`, the addon compartment (the addons button on the minimap), or a key binding
+  (Options → Keybindings → AddOns → FrontierScout). Pick a zone on the left, search, or toggle
+  categories. Select a discovery to see its details, set a waypoint, edit or delete it.
+- **Waypoints** go to TomTom when it is installed, otherwise to Blizzard's map pin.
+  `/fs waypoints native` or `/fs waypoints tomtom` forces one.
+
+You need to be in a guild: each guild has its own discoveries, and alts in other guilds don't see them.
+
 Libraries are already included in `Libs/`; nothing else to install.
 
 ## Slash commands
 
 | Command | Does |
 |---|---|
-| `/fs` or `/fs help` | List commands |
-| `/fs status` | Addon version, client build and interface, guild, saved-data session count |
+| `/fs` | Open the discoveries browser |
+| `/fs help` | List commands |
+| `/fs add [title]` | Record a discovery at your position (pre-filled from your target or the open vendor) |
+| `/fs waypoints [auto\|native\|tomtom]` | Show or set where waypoints go (auto = TomTom if installed) |
+| `/fs status` | Addon version, client build and interface, guild, number of discoveries, saved-data session count |
 | `/fs version` | Addon version |
 | `/fs debug` | Toggle debug output |
 
@@ -37,6 +54,9 @@ luacheck .
 busted
 ```
 
-CI runs the same two commands on every pull request.
+CI runs the same two commands on every pull request. The specs cover the pure modules
+(Format, Store, Query, Guild), the WoW-facing ones against API stubs (Capture, Waypoint,
+slash commands), and smoke-test the UI against fake frames (`tests/helpers/frames.lua`).
+The fakes can't catch a wrong Blizzard API call, so UI changes still need an in-game check.
 
 To update the embedded libraries, bump the pinned revisions in `scripts/update-libs.sh`, run it, and review the diff.
