@@ -33,20 +33,20 @@ describe("WoW Forever names", function()
 		assert.same({}, FS:OnlineArchivists())
 	end)
 
-	it("whispers 'Name Surname' without the realm", function()
-		local state, FS = boot({ { name = "Other Archivist-Realm", rankIndex = 1, officerNote = "{FS:A}", online = true, guid = "Player-1234-0000000003" } })
-		FS:Send("TEST", {}, "WHISPER", "Other Archivist-Realm")
-		assert.equals("Other Archivist", state.sent[#state.sent].target)
-		FS:Send("TEST", {}, "WHISPER", "Visitor-OtherRealm")
-		assert.equals("Visitor-OtherRealm", state.sent[#state.sent].target) -- another realm keeps it
+	it("addresses 'Name Surname' over the guild channel, never by whisper", function()
+		local state, FS = boot()
+		FS:Send("TEST", {}, "WHISPER", "Naal Mistrunner-Realm")
+		local sent = state.sent[#state.sent]
+		assert.equals("GUILD", sent.distribution)
+		assert.equals("Naal Mistrunner-Realm", select(2, wow.decode(state.ns, sent)))
 	end)
 
-	it("accepts whispers from 'Name Surname' senders in the guild", function()
+	it("accepts messages for us from 'Name Surname' senders in the guild", function()
 		local _, FS, ns = boot()
 		local got
 		FS:OnMessageType("TEST", function(_, _, sender) got = sender end)
-		local text = ns.Comm.Encode({ v = 1, g = FS.guildKey, t = "TEST" })
-		FS:OnCommReceived(ns.Comm.PREFIX, text, "WHISPER", "Naal Mistrunner")
+		local text = ns.Comm.Address("lakota blackelk", ns.Comm.Encode({ v = 1, g = FS.guildKey, t = "TEST" }))
+		FS:OnCommReceived(ns.Comm.PREFIX_TO, text, "GUILD", "Naal Mistrunner")
 		assert.equals("Naal Mistrunner-Realm", got)
 	end)
 
@@ -75,23 +75,10 @@ describe("WoW Forever names", function()
 		assert.is_false(FS:IsMe("Naal Mistrunner"))
 		assert.is_false(FS:IsMe("Lakota Blackelk-OtherRealm"))
 		FS.db.profile.debug = true
-		local text = ns.Comm.Encode({ v = 1, g = FS.guildKey, t = "TEST", to = "Naal Mistrunner-Realm" })
-		FS:OnCommReceived(ns.Comm.PREFIX, text, "GUILD", "Naal Mistrunner")
-		assert.matches("skipped TEST from Naal Mistrunner-Realm: addressed to Naal Mistrunner-Realm",
+		local text = ns.Comm.Address("Naal Mistrunner-Realm", ns.Comm.Encode({ v = 1, g = FS.guildKey, t = "TEST" }))
+		FS:OnCommReceived(ns.Comm.PREFIX_TO, text, "GUILD", "Naal Mistrunner")
+		assert.matches("skipped a message from Naal Mistrunner-Realm addressed to Naal Mistrunner-Realm",
 			table.concat(state.printed, "\n"), 1, true)
-	end)
-
-	it("hides 'player not found' errors caused by its own whispers", function()
-		local state, FS, ns = boot({ { name = "Gone Away-Realm", rankIndex = 1, officerNote = "{FS:A}", online = true, guid = "Player-1234-0000000004" } })
-		state.env.ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
-		FS:Send("TEST", {}, "WHISPER", "Gone Away-Realm")
-		assert.is_true(ns.Comm.FilterNotFound(nil, "CHAT_MSG_SYSTEM", "No player named 'Gone Away' is currently playing."))
-		assert.is_false(ns.Comm.FilterNotFound(nil, "CHAT_MSG_SYSTEM", "No player named 'Someone Else' is currently playing."))
-		-- From now on they are reached over the guild channel.
-		FS:Send("TEST", {}, "WHISPER", "Gone Away-Realm")
-		local last = state.sent[#state.sent]
-		assert.equals("GUILD", last.distribution)
-		assert.equals("Gone Away-Realm", ns.Comm.Decode(last.text).to)
 	end)
 
 	it("/fs whoami prints the names the game reports", function()

@@ -231,6 +231,14 @@ function M.boot(opts)
 	return state, ns.FS, ns
 end
 
+-- Decodes a sent message ({ prefix, text } from state.sent or a net queue
+-- item); returns the message and, for addressed messages, the recipient.
+function M.decode(ns, item)
+	local text, to = item.text, nil
+	if item.prefix == ns.Comm.PREFIX_TO then to, text = ns.Comm.Unaddress(text) end
+	return ns.Comm.Decode(text), to
+end
+
 -- Runs (and clears) pending C_Timer.After callbacks.
 function M.runTimers(state)
 	local pending = state.timers

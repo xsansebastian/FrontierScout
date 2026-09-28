@@ -52,12 +52,40 @@ describe("Comm isolation", function()
 		assert.same({ { 1, "Friend-Realm", "GUILD" } }, got)
 	end)
 
-	it("accepts whispers only from guild members, and ignores itself", function()
+	it("accepts addressed messages for this player only, and ignores itself and whispers", function()
 		local _, FS, Comm, got = boot()
-		deliver(FS, Comm, { v = 1, g = FS.guildKey, t = "TEST", x = 1 }, "WHISPER", "Stranger-Other")
-		deliver(FS, Comm, { v = 1, g = FS.guildKey, t = "TEST", x = 2 }, "WHISPER", "Friend-Realm")
-		deliver(FS, Comm, { v = 1, g = FS.guildKey, t = "TEST", x = 3 }, "GUILD", "Scout")
-		assert.same({ { 2, "Friend-Realm", "WHISPER" } }, got)
+		local function addressed(to, x)
+			local text = Comm.Address(to, Comm.Encode({ v = 1, g = FS.guildKey, t = "TEST", x = x }))
+			FS:OnCommReceived(Comm.PREFIX_TO, text, "GUILD", "Friend")
+		end
+		addressed("Someone-Realm", 1)
+		addressed("Scout-Realm", 2)
+		addressed("Scout", 3)
+		deliver(FS, Comm, { v = 1, g = FS.guildKey, t = "TEST", x = 4 }, "WHISPER", "Friend-Realm")
+		deliver(FS, Comm, { v = 1, g = FS.guildKey, t = "TEST", x = 5 }, "GUILD", "Scout")
+		FS:OnCommReceived(Comm.PREFIX_TO, "no separator", "GUILD", "Friend")
+		assert.same({ { 2, "Friend-Realm", "WHISPER" }, { 3, "Friend-Realm", "WHISPER" } }, got)
+	end)
+
+	it("sends messages for one player over the guild channel with the recipient up front", function()
+		local state, FS, Comm = boot()
+		FS:Send("TEST", { x = 1 }, "WHISPER", "Friend-Realm")
+		local sent = state.sent[#state.sent]
+		assert.same({ Comm.PREFIX_TO, "GUILD" }, { sent.prefix, sent.distribution })
+		assert.is_nil(sent.target)
+		local msg, to = wow.decode(state.ns, sent)
+		assert.equals("Friend-Realm", to)
+		assert.equals(1, msg.x)
+	end)
+
+	it("doesn't count messages for others against the sender's rate limit", function()
+		local _, FS, Comm, got = boot()
+		for _ = 1, 40 do
+			FS:OnCommReceived(Comm.PREFIX_TO, Comm.Address("Someone-Realm", Comm.Encode({ v = 1, g = FS.guildKey, t = "TEST" })),
+				"GUILD", "Friend")
+		end
+		deliver(FS, Comm, { v = 1, g = FS.guildKey, t = "TEST", x = 1 }, "GUILD", "Friend")
+		assert.same({ { 1, "Friend-Realm", "GUILD" } }, got)
 	end)
 
 	it("drops floods from one sender", function()

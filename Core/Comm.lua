@@ -1,7 +1,7 @@
 local _, ns = ...
 
 -- Addon messages (docs/SPEC.md §3.3, §6.3, §6.6): envelope, encoding, guild
--- and whisper isolation, per-sender rate limit, and pausing in combat or
+-- isolation, addressing, per-sender rate limit, and pausing in combat or
 -- instances. Protocol handlers are registered by Sync / Review.
 local FS, Guild = ns.FS, ns.Guild
 
@@ -59,36 +59,26 @@ end
 -- WoW side -------------------------------------------------------------------
 
 local handlers = {}
-local recentWhispers = {} -- whisper target -> GetTime(), to hide "player not found" errors
-local whisperFailed = {}  -- full name -> true: send to them over GUILD instead
 
--- Small messages for one player that go over the guild channel (addressed
--- with `to`) instead of a whisper: whispering WoW Forever's "Name Surname"
--- names isn't reliable, and these must arrive.
-Comm.VIA_GUILD = { PROP = true, PACK = true, QMISS = true, QDEC = true, ARCH = true, SYNCREQ = true, WANT = true, BUSY = true }
+-- Messages for one player go over the guild channel too: addon whispers to
+-- WoW Forever's "Name Surname" names are lost without any error. They use
+-- their own prefix and carry the recipient in plain text before the payload,
+-- so everyone else skips them before rate limiting or decoding.
+Comm.PREFIX_TO = "FScoutTo"
+local SEP = "\001"
 
--- Sends everything for `name` over the guild channel (a member whose
--- downloads over whispers never arrived asks for this).
-function FS:PreferGuild(name)
-	whisperFailed[name] = true
+function Comm.Address(to, text)
+	return to .. SEP .. text
 end
 
--- A whisper from us that the game couldn't deliver prints "No player named
--- '...' is currently playing." Hide it (the user didn't whisper anyone) and
--- reach that player over the guild channel from now on.
-function Comm.FilterNotFound(_, _, text)
-	if not ERR_CHAT_PLAYER_NOT_FOUND_S or type(text) ~= "string" then return false end
-	for target, at in pairs(recentWhispers) do
-		if GetTime() - at > 10 then
-			recentWhispers[target] = nil
-		elseif text == ERR_CHAT_PLAYER_NOT_FOUND_S:format(target) then
-			whisperFailed[Guild.FullName(target, GetNormalizedRealmName())] = true
-			FS:Debug("whisper to %s failed; using the guild channel for them", target)
-			return true
-		end
-	end
-	return false
+-- Recipient and payload of an addressed message, or nil.
+function Comm.Unaddress(text)
+	if type(text) ~= "string" then return nil end
+	local at = text:find(SEP, 1, true)
+	if not at or at == 1 or at > 80 then return nil end
+	return text:sub(1, at - 1), text:sub(at + 1)
 end
+
 local limiter = Comm.NewRateLimiter(Comm.RATE_LIMIT, Comm.RATE_WINDOW)
 local queue = {}
 
@@ -98,24 +88,25 @@ function FS:OnMessageType(t, handler)
 	table.insert(handlers[t], handler)
 end
 
--- Sends message type `t` with `payload` fields on GUILD or WHISPER (to
--- `target`). While paused the message is queued and sent on resume.
+-- Sends message type `t` with `payload` fields to the guild, or with channel
+-- "WHISPER" to `target` only (over the guild channel, addressed). While
+-- paused the message is queued and sent on resume.
 function FS:Send(t, payload, channel, target, prio)
 	if not self.guildKey then return false end
 	payload.v, payload.g, payload.t = Comm.PROTOCOL, self.guildKey, t
-	if channel == "WHISPER" and (Comm.VIA_GUILD[t] or whisperFailed[target]) then
-		payload.to, channel, target = target, "GUILD", nil
-	elseif channel == "WHISPER" then
-		target = Guild.WhisperName(target, GetNormalizedRealmName())
-		recentWhispers[target] = GetTime()
+	local prefix, text = Comm.PREFIX, Comm.Encode(payload)
+	if channel == "WHISPER" then
+		prefix, text = Comm.PREFIX_TO, Comm.Address(target, text)
+		self:Debug("sending %s to %s", t, target)
+	else
+		self:Debug("sending %s to the guild", t)
 	end
-	self:Debug("sending %s via %s%s", t, channel, payload.to and (" to " .. payload.to) or (target and (" to " .. target) or ""))
-	local item = { Comm.Encode(payload), channel, target, prio or "NORMAL" }
+	local item = { prefix, text, "GUILD", nil, prio or "NORMAL" }
 	if Comm.Paused() then
 		if #queue < Comm.MAX_QUEUE then queue[#queue + 1] = item end
 		return false
 	end
-	self:SendCommMessage(Comm.PREFIX, item[1], item[2], item[3], item[4])
+	self:SendCommMessage(item[1], item[2], item[3], item[4], item[5])
 	return true
 end
 
@@ -124,22 +115,25 @@ function FS:FlushQueue()
 	local pending = queue
 	queue = {}
 	for _, item in ipairs(pending) do
-		self:SendCommMessage(Comm.PREFIX, item[1], item[2], item[3], item[4])
+		self:SendCommMessage(item[1], item[2], item[3], item[4], item[5])
 	end
 	self:SendMessage("FRONTIERSCOUT_SYNC_RESUMED")
 end
 
 function FS:OnCommReceived(prefix, text, distribution, sender)
-	if prefix ~= Comm.PREFIX or not self.guildKey then return end
-	if distribution ~= "GUILD" and distribution ~= "WHISPER" then return end
+	if (prefix ~= Comm.PREFIX and prefix ~= Comm.PREFIX_TO) or not self.guildKey then return end
+	if distribution ~= "GUILD" then return end
 	sender = Guild.FullName(sender, GetNormalizedRealmName())
 	if not sender or sender == self:PlayerName() then return end
 	-- A guild member we don't know yet: our roster is out of date.
-	if distribution == "GUILD" and not self:Member(sender) then self:RequestRoster() end
-	-- Whispers only from guild members (SPEC §3.3).
-	if distribution == "WHISPER" and not self:Member(sender) then
-		self:Debug("ignored a whisper from %s: not in the guild roster", sender)
-		return
+	if not self:Member(sender) then self:RequestRoster() end
+	local to
+	if prefix == Comm.PREFIX_TO then
+		to, text = Comm.Unaddress(text)
+		if not to or not self:IsMe(to) then
+			self:Debug("skipped a message from %s addressed to %s", sender, tostring(to))
+			return
+		end
 	end
 	-- The archivist this client pulls from is exempt: a full sync is many messages.
 	if sender ~= self.syncPartner and not limiter(sender, GetTime()) then
@@ -151,22 +145,15 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 		self:Debug("ignored a message from %s: other guild or version", sender)
 		return
 	end
-	-- Guild messages addressed to someone else.
-	if msg.to ~= nil and not self:IsMe(msg.to) then
-		self:Debug("skipped %s from %s: addressed to %s", tostring(msg.t), sender, tostring(msg.to))
-		return
-	end
-	self:Debug("received %s from %s", tostring(msg.t), sender)
+	self:Debug("received %s from %s%s", tostring(msg.t), sender, to and " (to us)" or "")
 	for _, handler in ipairs(handlers[msg.t] or {}) do
-		handler(self, msg, sender, distribution)
+		handler(self, msg, sender, to and "WHISPER" or "GUILD")
 	end
 end
 
 FS:OnEnableHook(function()
 	FS:RegisterComm(Comm.PREFIX)
-	if ChatFrame_AddMessageEventFilter then
-		ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", Comm.FilterNotFound)
-	end
+	FS:RegisterComm(Comm.PREFIX_TO)
 	FS:ListenEvent("PLAYER_REGEN_ENABLED", function() FS:FlushQueue() end)
 	FS:ListenEvent("ZONE_CHANGED_NEW_AREA", function() FS:FlushQueue() end)
 end)
