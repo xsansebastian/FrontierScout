@@ -49,12 +49,40 @@ function Widgets.SetupRow(row, onClick)
 	row:SetScript("OnClick", onClick)
 end
 
+-- Widens a button to fit its text (never below `minWidth`). Call it again
+-- after changing the text.
+function Widgets.FitButton(b, minWidth)
+	local fs = b:GetFontString()
+	local textWidth = fs and fs:GetStringWidth() or 0
+	b:SetWidth(math.max(minWidth or 0, textWidth + 24))
+end
+
+-- A panel button at least `width` wide, wider when its text needs it.
 function Widgets.Button(parent, text, width, onClick)
 	local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-	b:SetSize(width, 22)
+	b:SetHeight(22)
 	b:SetText(text)
+	Widgets.FitButton(b, width)
 	b:SetScript("OnClick", onClick)
 	return b
+end
+
+-- A checkbox with its label; `check.label` is the label font string.
+function Widgets.CheckBox(parent, text, checked, onClick)
+	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+	check:SetSize(24, 24)
+	check:SetChecked(checked)
+	check.label = check:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	check.label:SetPoint("LEFT", check, "RIGHT", 0, 1)
+	check.label:SetText(text)
+	check:SetScript("OnClick", onClick)
+	return check
+end
+
+-- Places `check` after `prev`'s label, so the spacing follows the text length
+-- (labels differ a lot between languages).
+function Widgets.Follow(check, prev, gap)
+	check:SetPoint("LEFT", prev.label, "RIGHT", gap or 12, -1)
 end
 
 -- Full description of an entry for a detail pane.

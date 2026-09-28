@@ -174,7 +174,7 @@ function M.new(opts)
 	env.GuildControlGetRankName = function(i) return ranks[i] end
 	env.GetGuildInfoText = function() return state.guildInfo end
 	env.CanEditGuildInfo = function() return (opts.rank or 0) == 0 end
-	env.SetGuildInfoText = function(text) state.guildInfo = text end
+	-- SetGuildInfoText is protected in the game: addons can't call it.
 	env.GetNormalizedRealmName = function() return "Realm" end
 	env.C_Club = { GetGuildClubId = function() return opts.clubId end }
 	-- opts.player = "Name" (realm "Realm"), default Scout.

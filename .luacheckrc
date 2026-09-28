@@ -60,7 +60,6 @@ read_globals = {
 	"NO",
 	"ScrollBoxConstants",
 	"ScrollUtil",
-	"SetGuildInfoText",
 	"StaticPopup_Show",
 	"tinsert",
 	"TomTom",

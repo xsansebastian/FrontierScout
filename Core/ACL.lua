@@ -40,22 +40,27 @@ function ACL.Format(t)
 	return table.concat(parts, " ") .. "]"
 end
 
--- Guild Info text with the tag replaced or appended, leaving everything else
--- as it was. Returns nil, "toolong" when the result wouldn't fit.
-function ACL.Apply(text, t)
+-- Compares Guild Info text with the thresholds `t` someone wants. Addons may
+-- not write Guild Info (SetGuildInfoText is protected), so leadership pastes
+-- the tag in by hand and this says how far along that is:
+--   "applied"  the text has a tag with exactly these thresholds
+--   "differs"  the text has a tag with other thresholds (returned second)
+--   "missing"  no tag yet
+--   "toolong"  no tag, and adding one would pass MAX_INFO (characters over returned second)
+function ACL.SetupStatus(text, t)
 	text = text or ""
 	local tag = ACL.Format(t)
-	local s, e = text:find(TAG_PATTERN)
-	local result
-	if s then
-		result = text:sub(1, s - 1) .. tag .. text:sub(e + 1)
-	elseif text == "" then
-		result = tag
-	else
-		result = text:gsub("%s+$", "") .. "\n" .. tag
+	local current = text:match(TAG_PATTERN) and text:match("%[FS1[^%]]*%]")
+	if current then
+		local parsed = ACL.Parse(current)
+		for _, key in ipairs(ACL.KEYS) do
+			if parsed[key] ~= (t[key] or ACL.DEFAULTS[key]) then return "differs", current end
+		end
+		return "applied"
 	end
-	if #result > ACL.MAX_INFO then return nil, "toolong" end
-	return result
+	local needed = #text + (text == "" and 0 or 1) + #tag
+	if needed > ACL.MAX_INFO then return "toolong", needed - ACL.MAX_INFO end
+	return "missing"
 end
 
 -- May a member of rank `rankIndex` (0 = Guild Master) do `action`?

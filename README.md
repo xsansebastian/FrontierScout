@@ -64,9 +64,12 @@ Until a guild is set up, only the Guild Master can write. In `/fs config` → **
 
 1. Choose the lowest rank allowed to submit, edit or delete (own / anyone's), report, and to be an
    archivist.
-2. Click **Write to Guild Info** (needs the "Edit Guild Info" guild permission). This adds a tag
-   such as `[FS1 s=5 eo=5 ea=1 do=5 da=1 r=9 ar=1]` to Guild Info and leaves the rest of the text
-   alone. Every member's addon reads it from there, so nobody can fake it.
+2. Copy the tag shown under the ranks (click it, Ctrl+A, Ctrl+C), for example
+   `[FS1 s=5 eo=5 ea=1 do=5 da=1 r=9 ar=1]`, and paste it on its own line in **Guild & Communities →
+   Guild Info** (needs the "Edit Guild Info" guild permission). Replace any older `[FS1 ...]` tag and
+   keep the rest of the text. The game doesn't let addons edit Guild Info, so this step is manual.
+   Click **Check again**: the page confirms when Guild Info has the settings. Every member's addon
+   reads the tag from there within a minute, so nobody can fake it.
 3. Make archivists by adding `{FS:A}` to their **officer note**. Archivists will approve
    discoveries and share them with the guild once sync arrives.
 

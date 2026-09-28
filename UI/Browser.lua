@@ -5,6 +5,9 @@ local _, ns = ...
 local FS, L = ns.FS, ns.L
 local Categories, Query, Icons, Widgets = ns.Categories, ns.Query, ns.Icons, ns.Widgets
 
+local INSET_TOP, INSET_TOP_BANNER = -58, -74 -- lists' top edge without / with the setup banner
+local TAB_WIDTH = 110
+
 local browser -- the frame, created on first open
 local state = { zone = nil, selected = nil, filter = { text = "", cats = {} } }
 for _, cat in ipairs(Categories.order) do state.filter.cats[cat] = true end
@@ -110,11 +113,23 @@ function refresh()
 	if state.selected and not (store and store:Get(state.selected)) then state.selected = nil end
 	showDetail()
 	browser:SetTitle(L["FrontierScout - %d discoveries"]:format(#all))
+	-- Visible tabs sit side by side, so a hidden one (Review) leaves no gap.
+	local prevTab
 	for _, tab in ipairs(browser.tabs) do
 		local p = browser.pages[tab.key]
 		if p then
 			tab:SetShown(p.page.visible())
 			tab:SetText(p.page.label())
+			Widgets.FitButton(tab, TAB_WIDTH)
+		end
+		if tab:IsShown() then
+			tab:ClearAllPoints()
+			if prevTab then
+				tab:SetPoint("LEFT", prevTab, "RIGHT", 4, 0)
+			else
+				tab:SetPoint("TOPLEFT", browser, "BOTTOMLEFT", 8, -2)
+			end
+			prevTab = tab
 		end
 		if tab.key == browser.tab then tab:LockHighlight() else tab:UnlockHighlight() end
 	end
@@ -123,7 +138,9 @@ function refresh()
 		if active.page.visible() then active.page.refresh(active.frame) else FS:ShowBrowserTab("discoveries") end
 	end
 	Widgets.Gate(browser.new, FS:Can("create"))
-	browser.banner:SetShown(not FS.aclConfigured and CanEditGuildInfo())
+	local banner = not FS.aclConfigured and CanEditGuildInfo()
+	browser.banner:SetShown(banner)
+	browser.Inset:SetPoint("TOPLEFT", 8, banner and INSET_TOP_BANNER or INSET_TOP)
 end
 
 -- Construction -------------------------------------------------------------------
@@ -184,32 +201,26 @@ local function buildFilters(f)
 		refresh()
 	end)
 
-	local anchor = search
+	-- Category toggles, each placed after the previous label.
+	local prev
 	for _, cat in ipairs(Categories.order) do
-		local check = CreateFrame("CheckButton", nil, top, "UICheckButtonTemplate")
-		check:SetSize(24, 24)
-		check:SetPoint("LEFT", anchor, "RIGHT", anchor == search and 12 or 70, 0)
-		check:SetChecked(true)
-		local label = check:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-		label:SetPoint("LEFT", check, "RIGHT", 0, 1)
-		label:SetText(Categories.Label(cat))
-		check:SetScript("OnClick", function(btn)
+		local check = Widgets.CheckBox(top, Categories.Label(cat), true, function(btn)
 			state.filter.cats[cat] = btn:GetChecked() and true or nil
 			refresh()
 		end)
-		anchor = check
+		if prev then
+			Widgets.Follow(check, prev, 12)
+		else
+			check:SetPoint("LEFT", search, "RIGHT", 16, 0)
+		end
+		prev = check
 	end
 
-	local newOnly = CreateFrame("CheckButton", nil, top, "UICheckButtonTemplate")
-	newOnly:SetSize(24, 24)
-	newOnly:SetPoint("LEFT", anchor, "RIGHT", 70, 0)
-	local newLabel = newOnly:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	newLabel:SetPoint("LEFT", newOnly, "RIGHT", 0, 1)
-	newLabel:SetText(L["New since last login"])
-	newOnly:SetScript("OnClick", function(btn)
+	local newOnly = Widgets.CheckBox(top, L["New since last login"], false, function(btn)
 		state.newOnly = btn:GetChecked() and true or nil
 		refresh()
 	end)
+	Widgets.Follow(newOnly, prev, 24)
 	f.newOnly = newOnly
 
 	f.search = search
@@ -218,9 +229,13 @@ local function buildFilters(f)
 	new:SetPoint("TOPRIGHT", -12, -4)
 	f.new = new
 
-	-- Shown to leadership until the guild has a FrontierScout tag.
+	-- Shown to leadership until the guild has a FrontierScout tag, on its own
+	-- line under the filters (the lists move down to make room).
 	f.banner = top:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	f.banner:SetPoint("BOTTOMRIGHT", new, "BOTTOMLEFT", -8, 4)
+	f.banner:SetPoint("TOPLEFT", 18, -34)
+	f.banner:SetPoint("RIGHT", -18, 0)
+	f.banner:SetJustifyH("LEFT")
+	f.banner:SetTextColor(1, 0.5, 0.1)
 	f.banner:SetText(L["Not set up for this guild yet: only the Guild Master can write. See /fs config."])
 	f.banner:Hide()
 end
@@ -228,7 +243,7 @@ end
 local function build()
 	local f = CreateFrame("Frame", "FrontierScoutBrowser", UIParent, "ButtonFrameTemplate")
 	ButtonFrameTemplate_HidePortrait(f)
-	f:SetSize(860, 520)
+	f:SetSize(920, 540)
 	f:SetPoint("CENTER")
 	f:SetFrameStrata("HIGH")
 	f:SetToplevel(true)
@@ -245,13 +260,13 @@ local function build()
 
 	local inset = f.Inset
 	inset:ClearAllPoints()
-	inset:SetPoint("TOPLEFT", 8, -60)
+	inset:SetPoint("TOPLEFT", 8, INSET_TOP)
 	inset:SetPoint("BOTTOMRIGHT", -8, 8)
 
 	local zones, zoneBar, zoneView = Widgets.NewList(inset)
 	zones:SetPoint("TOPLEFT", 6, -6)
 	zones:SetPoint("BOTTOMLEFT", 6, 6)
-	zones:SetWidth(200)
+	zones:SetWidth(190)
 	zoneView:SetElementInitializer("Button", zoneRowInit)
 	ScrollUtil.InitScrollBoxListWithScrollBar(zones, zoneBar, zoneView)
 	f.zones = zones
@@ -259,7 +274,7 @@ local function build()
 	local entries, entryBar, entryView = Widgets.NewList(inset)
 	entries:SetPoint("TOPLEFT", zones, "TOPRIGHT", 22, 0)
 	entries:SetPoint("BOTTOMLEFT", zones, "BOTTOMRIGHT", 22, 0)
-	entries:SetWidth(280)
+	entries:SetWidth(260)
 	entryView:SetElementInitializer("Button", entryRowInit)
 	ScrollUtil.InitScrollBoxListWithScrollBar(entries, entryBar, entryView)
 	f.entries = entries
@@ -275,13 +290,7 @@ local function build()
 	-- Tabs: Discoveries plus the pages other files register in ns.BrowserPages.
 	f.pages, f.tabs = {}, {}
 	local function addTab(key, label)
-		local tab = Widgets.Button(f, label, 130, function() FS:ShowBrowserTab(key) end)
-		local prev = f.tabs[#f.tabs]
-		if prev then
-			tab:SetPoint("LEFT", prev, "RIGHT", 4, 0)
-		else
-			tab:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 8, -2)
-		end
+		local tab = Widgets.Button(f, label, TAB_WIDTH, function() FS:ShowBrowserTab(key) end)
 		tab.key = key
 		f.tabs[#f.tabs + 1] = tab
 		return tab

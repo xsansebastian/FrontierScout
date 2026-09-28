@@ -9,8 +9,9 @@ and turn on `/fs debug` while testing.
 
 ## Setup (Guild Master or an officer with "Edit Guild Info")
 
-1. `/fs config` → **Guild Setup**. Pick ranks for each action, **Write to Guild Info**.
-   - Guild Info now ends with `[FS1 ...]`; the rest of the text is unchanged.
+1. `/fs config` → **Guild Setup**. Pick ranks for each action, copy the tag (click it, Ctrl+A,
+   Ctrl+C) and paste it on its own line in Guild & Communities → Guild Info.
+   - Back in Guild Setup, **Check again** says "Guild Info has these settings".
 2. Add `{FS:A}` to one or two officers' officer notes (these are the archivists).
 3. Everyone: `/reload`, then `/fs status` shows your rank, whether you're an archivist, and
    "Guild permissions" no longer says "not set up".

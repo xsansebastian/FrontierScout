@@ -172,9 +172,12 @@ writable only by ranks with "Edit Guild Info" (`CanEditGuildInfo()`).
 - `FS1` = tag schema version. Parsed with a single Lua pattern; missing keys fall back to defaults.
 - Default when there is no tag: `s=0 eo=0 ea=0 do=0 da=0 r=9 ar=0` (GM-only writes) and a banner
   telling leadership to configure the addon.
-- Options → *Guild Setup* shows rank names next to each threshold, previews the tag, and has a
-  **Write to Guild Info** button (only enabled when `CanEditGuildInfo()` is true). It appends or
-  replaces the tag and leaves the rest of the guild info text untouched.
+- Options → *Guild Setup* shows rank names next to each threshold and the resulting tag in a
+  read-only text box to copy. **`SetGuildInfoText` is protected on Forever** (calling it from an
+  addon raises "blocked from an action only available to the Blizzard UI"), so leadership pastes
+  the tag into Guild Info by hand. The page then compares Guild Info with the chosen thresholds
+  (`ACL.SetupStatus`: has these settings / other settings / no tag yet / too long) and has a
+  **Check again** button.
 
 **b) Officer notes: archivist designation.** An archivist's officer note contains the token
 `{FS:A}` (6 chars; officer notes allow 31). Only ranks with "Edit Officer Note" can set it,
@@ -492,8 +495,9 @@ Tabs:
 - Waypoints: `Auto (TomTom if loaded)` / `Native only` / `TomTom only`.
 - Notifications: chat message and/or on-screen message (`UIErrorsFrame`) when new entries (not
   edits) arrive in my current zone; one summary line for a batch.
-- Guild Setup (leadership): ACL thresholds with rank names, tag preview, "Write to Guild Info",
-  and a checklist of how to tag archivists in officer notes.
+- Guild Setup (leadership): ACL thresholds with rank names, the tag to copy into Guild Info with
+  a status line, and a checklist of how to tag archivists in officer notes.
+- Options are split into tabs (Map, General, Guild Setup, Data) so no page overflows the window.
 - Data: purge stale guild buckets, reset local data and resync (for archivists only while another
   archivist is online, so the guild's data can't be lost).
 
@@ -616,7 +620,9 @@ whole continent only on a continent map), and `tests/polish_spec.lua` keeps budg
    `SendAddonMessage`, and what the throttle budgets are.
 4. Whether `C_Map.CanSetUserWaypointOnMap` is true for all Forever zones.
 5. Which Blizzard atlas icons exist for categories (fall back to bundled TGAs if needed).
-6. Guild Info text length limit on Forever, to confirm there's room for the tag. The addon assumes
+6. ~~Whether addons may write Guild Info~~: **no**, `SetGuildInfoText` is protected (found in the
+   beta); the tag is pasted by hand. Guild Info text length limit on Forever, to confirm there's
+   room for the tag. The addon assumes
    500 characters (`ACL.MAX_INFO`) and refuses to write a tag that would exceed it.
 7. Merchant window API on Forever: `C_MerchantFrame.GetItemInfo` vs. the older
    `GetMerchantItemInfo` (both handled), and whether the **Scout** button at the top right of

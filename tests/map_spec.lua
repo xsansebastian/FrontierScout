@@ -222,11 +222,11 @@ describe("Options", function()
 		local state, FS = boot()
 		showMap(state, 1)
 		local opts = state.options.FrontierScout()
-		local enabled = opts.args.worldmap.args.enabled
+		local enabled = opts.args.map.args.worldmap.args.enabled
 		enabled.set(nil, false)
 		assert.is_false(FS.db.profile.worldmap.enabled)
 		assert.same({}, state.pins.world)
-		local cats = opts.args.minimap.args.cats
+		local cats = opts.args.map.args.minimap.args.cats
 		cats.set(nil, "npc", false)
 		assert.is_false(cats.get(nil, "npc"))
 	end)

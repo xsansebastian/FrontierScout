@@ -66,7 +66,7 @@ describe("Guild Setup options", function()
 		return state.options.FrontierScout().args.guild.args
 	end
 
-	it("edits thresholds and writes the tag into Guild Info", function()
+	it("shows the tag to copy, then confirms once it is pasted into Guild Info", function()
 		local state, FS = boot(0, "Raid nights: Tue")
 		local args = setup(state)
 		assert.equals(0, args.s.get())
@@ -74,24 +74,38 @@ describe("Guild Setup options", function()
 		assert.equals("Everyone", args.r.values()[9])
 		args.s.set(nil, 3)
 		args.ar.set(nil, 1)
-		assert.matches("[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1]", args.preview.name(), 1, true)
-		assert.is_false(args.write.disabled())
-		args.write.func()
-		assert.equals("Raid nights: Tue\n[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1]", state.guildInfo)
+		assert.equals("[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1]", args.tag.get())
+		args.tag.set(nil, "typed over") -- read-only
+		assert.equals("[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1]", args.tag.get())
+		assert.matches("doesn't have the tag yet", args.status.name(), 1, true)
+
+		-- The Guild Master pastes it into Guild Info in the game's own UI.
+		state.guildInfo = "Raid nights: Tue\n[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1]"
+		args.recheck.func()
+		assert.matches("has these settings", args.status.name(), 1, true)
 		assert.is_true(FS.aclConfigured)
 		assert.equals(3, FS.acl.s)
 	end)
 
-	it("can't be written without the Edit Guild Info permission", function()
-		local state, FS = boot(2)
-		assert.is_true(setup(state).write.disabled())
-		assert.same({ false, "denied" }, { FS:WriteGuildSetup(FS.acl) })
+	it("says when Guild Info has older settings", function()
+		local state = boot(0, "[FS1 s=0]")
+		local args = setup(state)
+		args.s.set(nil, 2)
+		assert.matches("other settings: [FS1 s=0]", args.status.name(), 1, true)
 	end)
 
-	it("reports when Guild Info has no room for the tag", function()
-		local state, FS = boot(0, ("x"):rep(490))
-		assert.same({ false, "toolong" }, { FS:WriteGuildSetup(FS.acl) })
-		assert.matches("too long", table.concat(state.printed, "\n"), 1, true)
+	it("says when Guild Info has no room for the tag", function()
+		local state = boot(0, ("x"):rep(490))
+		assert.matches("shorten it by", setup(state).status.name(), 1, true)
+	end)
+
+	it("never calls the protected SetGuildInfoText", function()
+		local state = boot(0)
+		state.env.SetGuildInfoText = function() error("protected: blocked in the game") end
+		local args = setup(state)
+		args.recheck.func()
+		args.tag.get()
+		args.status.name()
 	end)
 
 	it("lists archivists", function()
