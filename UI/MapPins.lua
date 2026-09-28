@@ -25,10 +25,14 @@ function FS:EntryMenu(owner, e)
 		root:CreateTitle(e.title)
 		root:CreateButton(L["Waypoint"], function() self:Waypoint(e) end)
 		root:CreateButton(L["Show in browser"], function() self:SelectEntry(e.id) end)
-		root:CreateButton(L["Edit"], function() self:OpenEditor(e.id) end)
-		root:CreateButton(L["Delete"], function()
-			StaticPopup_Show("FRONTIERSCOUT_DELETE", e.title, nil, e.id)
-		end)
+		if self:Can("edit", e) then
+			root:CreateButton(L["Edit"], function() self:OpenEditor(e.id) end)
+		end
+		if self:Can("delete", e) then
+			root:CreateButton(L["Delete"], function()
+				StaticPopup_Show("FRONTIERSCOUT_DELETE", e.title, nil, e.id)
+			end)
+		end
 	end)
 end
 
@@ -146,7 +150,7 @@ FS.pinFrames = pins
 -- Ctrl + right-click on the world map: add a discovery at the cursor.
 local function onMapMouseDown(container, button)
 	if button ~= "RightButton" or not IsControlKeyDown() then return end
-	if not FS:GetStore() then return end
+	if not FS:GetStore() or not FS:CheckCan("create") then return end
 	local x, y = container:GetNormalizedCursorPosition()
 	local map = WorldMapFrame:GetMapID()
 	if not (map and x and x >= 0 and x <= 1 and y >= 0 and y <= 1) then return end

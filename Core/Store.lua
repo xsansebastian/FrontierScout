@@ -216,19 +216,13 @@ end
 
 local FS = ns.FS
 
--- "Name-Realm" of the player.
-local function playerFullName()
-	local name, realm = UnitFullName("player")
-	return name .. "-" .. (realm or GetNormalizedRealmName())
-end
-
 local function context(self)
 	local global = self.db.global
 	global.idSeq = (global.idSeq or 0) + 1
 	local now = GetServerTime()
 	return {
 		id = Store.MakeId("E", UnitGUID("player"), now, global.idSeq),
-		by = playerFullName(),
+		by = self:PlayerName(),
 		now = now,
 	}
 end
@@ -239,6 +233,7 @@ end
 function FS:SaveEntry(id, data)
 	local store = self:GetStore()
 	if not store then return nil, "noguild" end
+	if not self:Can(id and "edit" or "create", id and store:Get(id)) then return nil, "denied" end
 	local ctx = context(self)
 	local entry, err
 	if id then
@@ -253,6 +248,7 @@ end
 function FS:DeleteEntry(id)
 	local store = self:GetStore()
 	if not store then return nil, "noguild" end
+	if not self:Can("delete", store:Get(id)) then return nil, "denied" end
 	local t, err = store:Delete(id, context(self))
 	if t then self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED", id) end
 	return t, err

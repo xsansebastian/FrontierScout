@@ -85,3 +85,22 @@ function Widgets.DetailText(e)
 	end
 	return table.concat(lines, "\n") .. "|r"
 end
+
+local function gateEnter(button)
+	if button:IsEnabled() or not button.gateReason then return end
+	GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+	GameTooltip:SetText(button.gateReason, 1, 0.3, 0.3, 1, true)
+	GameTooltip:Show()
+end
+
+-- Enables `button` when `allowed`; otherwise disables it and explains why on hover.
+function Widgets.Gate(button, allowed)
+	if not button.gated then
+		button.gated = true
+		button:SetMotionScriptsWhileDisabled(true)
+		button:HookScript("OnEnter", gateEnter)
+		button:HookScript("OnLeave", GameTooltip_Hide)
+	end
+	button.gateReason = not allowed and L["Your guild rank can't do that. Guild leadership sets this up in /fs config."] or nil
+	if allowed then button:Enable() else button:Disable() end
+end

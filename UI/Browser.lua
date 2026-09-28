@@ -75,8 +75,8 @@ function showDetail()
 	d.title:SetText(e.title)
 	d.text:SetText(Widgets.DetailText(e))
 	d.waypoint:Enable()
-	d.edit:Enable()
-	d.delete:Enable()
+	Widgets.Gate(d.edit, FS:Can("edit", e))
+	Widgets.Gate(d.delete, FS:Can("delete", e))
 end
 
 -- Refresh ------------------------------------------------------------------------
@@ -106,6 +106,8 @@ function refresh()
 	if state.selected and not (store and store:Get(state.selected)) then state.selected = nil end
 	showDetail()
 	browser:SetTitle(L["FrontierScout - %d discoveries"]:format(#all))
+	Widgets.Gate(browser.new, FS:Can("create"))
+	browser.banner:SetShown(not FS.aclConfigured and CanEditGuildInfo())
 end
 
 -- Construction -------------------------------------------------------------------
@@ -177,6 +179,13 @@ local function buildFilters(f)
 
 	local new = Widgets.Button(f, L["New"], 80, function() FS:OnSlashCommand("add") end)
 	new:SetPoint("TOPRIGHT", -12, -28)
+	f.new = new
+
+	-- Shown to leadership until the guild has a FrontierScout tag.
+	f.banner = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	f.banner:SetPoint("BOTTOMRIGHT", new, "BOTTOMLEFT", -8, 4)
+	f.banner:SetText(L["Not set up for this guild yet: only the Guild Master can write. See /fs config."])
+	f.banner:Hide()
 end
 
 local function build()
@@ -270,6 +279,7 @@ function FS:ToggleBrowser()
 end
 
 FS:Listen("FRONTIERSCOUT_ENTRIES_CHANGED", function() refresh() end)
+FS:Listen("FRONTIERSCOUT_ROSTER_UPDATED", function() refresh() end)
 FS:Listen("FRONTIERSCOUT_GUILD_CHANGED", function()
 	state.zone, state.selected = nil, nil
 	if browser then browser:Hide() end

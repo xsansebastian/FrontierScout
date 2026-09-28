@@ -33,6 +33,7 @@ function fakeMethods:GetText() return self.text end
 function fakeMethods:GetStringHeight() return 12 end
 function fakeMethods:GetChecked() return self.checked end
 function fakeMethods:SetChecked(on) self.checked = on end
+function fakeMethods:IsEnabled() return self.enabled ~= false end
 function fakeMethods:Enable() self.enabled = true end
 function fakeMethods:Disable() self.enabled = false end
 function fakeMethods:HasFocus() return self.focus end

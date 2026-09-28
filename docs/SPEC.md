@@ -205,7 +205,9 @@ end
 ### 4.5 Roster cache
 
 - Built from `GetGuildRosterInfo(i)` on `GUILD_ROSTER_UPDATE`. Refreshes are requested with
-  `C_GuildInfo.GuildRoster()`, at most once per 15 s (Blizzard throttle).
+  `C_GuildInfo.GuildRoster()`, at most once per 15 s (Blizzard throttle), and every 60 s in the
+  background; the Guild Info tag is re-read on each roster update.
+- A rank's own/any rights combine: someone allowed to edit *any* entry may edit their own too.
 - Stores `fullName (Name-Realm) → { rankIndex, officerNoteHasTag, online }`.
 - All ACL and archivist checks go through the cache and use **current** rank at receive time.
 - Names are always normalized to `Name-Realm` (`Ambiguate` only for display).
@@ -567,7 +569,7 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
 | M0 | Scaffold | TOC, libs, DB, slash cmd, luacheck/busted CI | Loads on Forever beta with no Lua errors |
 | M1 | Local atlas | Store, capture, edit dialog, browser (Discoveries tab), waypoints | Can create, browse and waypoint local entries. *Until M5, every write goes straight into the local canonical set, approved by its writer.* |
 | M2 | Map surfaces | World map pins, minimap pins, side panel, tooltips, filters, display options | Entries visible on all four surfaces |
-| M3 | Guild & ACL | guildKey isolation, roster cache, Guild Info tag, officer-note archivists, Guild Setup UI | ACL correctly gates UI in a 3-rank test guild |
+| M3 | Guild & ACL | guildKey isolation, roster cache, Guild Info tag, officer-note archivists, Guild Setup UI | ACL correctly gates UI in a 3-rank test guild. *Until M5, allowed writes still apply locally.* |
 | M4 | Sync | Digest, HELLO/ARCH, SYNCREQ…ENT, APPR live push | Two clients converge from empty and after divergent edits |
 | M5 | Curation | Proposals, outbox, review queue, QSYNC, reports, tombstones | End-to-end submit → approve → all members see it |
 | M6 | Polish | Notifications, localization scaffold (esES), perf pass (5k entries), docs | Beta testers in one guild for a week without data loss |
@@ -584,7 +586,8 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
    `SendAddonMessage`, and what the throttle budgets are.
 4. Whether `C_Map.CanSetUserWaypointOnMap` is true for all Forever zones.
 5. Which Blizzard atlas icons exist for categories (fall back to bundled TGAs if needed).
-6. Guild Info text length limit on Forever, to confirm there's room for the tag.
+6. Guild Info text length limit on Forever, to confirm there's room for the tag. The addon assumes
+   500 characters (`ACL.MAX_INFO`) and refuses to write a tag that would exceed it.
 7. Merchant window API on Forever: `C_MerchantFrame.GetItemInfo` vs. the older
    `GetMerchantItemInfo` (both handled), and whether the **Scout** button at the top right of
    `MerchantFrame` overlaps anything.

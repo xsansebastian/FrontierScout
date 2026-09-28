@@ -17,6 +17,7 @@ Locales\enUS.lua
 Core\Init.lua
 Core\Categories.lua
 Core\Format.lua
+Core\ACL.lua
 Core\Store.lua
 Core\Query.lua
 Core\Guild.lua

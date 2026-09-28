@@ -118,7 +118,30 @@ function M.new(opts)
 	env.GetServerTime = function() return opts.now or 1790000000 end
 	env.GetBuildInfo = function() return "1.60.1", "70009", "Sep 25 2026", 16001 end
 	env.IsInGuild = function() return opts.guild ~= nil end
-	env.GetGuildInfo = function() return opts.guild end
+	-- Guild: opts.rank (default 0 = GM), opts.ranks (names), opts.roster
+	-- ({ name, rankIndex, officerNote, online }), opts.guildInfo text.
+	env.GetGuildInfo = function()
+		if opts.guild then return opts.guild, "Rank", opts.rank or 0 end
+	end
+	env.GetTime = function() return state.time or 1000 end
+	state.roster = opts.roster or {}
+	state.guildInfo = opts.guildInfo or ""
+	state.canViewNotes = opts.canViewNotes or false
+	env.C_GuildInfo = {
+		GuildRoster = function() state.rosterRequests = (state.rosterRequests or 0) + 1 end,
+		CanViewOfficerNote = function() return state.canViewNotes end,
+	}
+	env.GetNumGuildMembers = function() return #state.roster end
+	env.GetGuildRosterInfo = function(i)
+		local m = state.roster[i]
+		return m.name, "Rank", m.rankIndex, 60, "Warrior", "Zone", "", m.officerNote or "", m.online
+	end
+	local ranks = opts.ranks or { "Guild Master", "Officer", "Member" }
+	env.GuildControlGetNumRanks = function() return #ranks end
+	env.GuildControlGetRankName = function(i) return ranks[i] end
+	env.GetGuildInfoText = function() return state.guildInfo end
+	env.CanEditGuildInfo = function() return (opts.rank or 0) == 0 end
+	env.SetGuildInfoText = function(text) state.guildInfo = text end
 	env.GetNormalizedRealmName = function() return "Realm" end
 	env.C_Club = { GetGuildClubId = function() return opts.clubId end }
 	env.UnitFullName = function() return "Scout", "Realm" end

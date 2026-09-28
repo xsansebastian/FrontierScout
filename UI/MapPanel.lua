@@ -51,6 +51,7 @@ local function showDetail(e)
 	Icons.Apply(d.icon, e.sub)
 	d.title:SetText(e.title)
 	d.text:SetText(Widgets.DetailText(e))
+	Widgets.Gate(d.edit, FS:Can("edit", e))
 end
 
 function refresh()
@@ -74,6 +75,7 @@ function refresh()
 	end
 	panel.list:SetDataProvider(CreateDataProvider(rows), ScrollBoxConstants.RetainScrollPosition)
 	panel.empty:SetShown(#rows == 0)
+	Widgets.Gate(panel.new, FS:Can("create"))
 	panel.empty:SetText(store and L["No discoveries on this map."] or L["Join a guild to use FrontierScout."])
 	local e = store and state.selected and store:Get(state.selected)
 	if not e then state.selected = nil end
@@ -155,6 +157,7 @@ local function build()
 
 	local new = Widgets.Button(panel, L["New"], 70, function() FS:OnSlashCommand("add") end)
 	new:SetPoint("BOTTOMLEFT", 6, 6)
+	panel.new = new
 	local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
 	hint:SetPoint("LEFT", new, "RIGHT", 6, 0)
 	hint:SetPoint("RIGHT", -6, 0)
@@ -227,3 +230,4 @@ FS:Listen("FRONTIERSCOUT_GUILD_CHANGED", function()
 	refresh()
 end)
 FS:Listen("FRONTIERSCOUT_DISPLAY_CHANGED", function() refresh() end)
+FS:Listen("FRONTIERSCOUT_ROSTER_UPDATED", function() refresh() end)

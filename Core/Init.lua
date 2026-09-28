@@ -132,7 +132,7 @@ function commands.add(self, args)
 		self:Print(L["FrontierScout records open-world discoveries only."])
 		return
 	end
-	if not self:GetStore() then return end
+	if not self:GetStore() or not self:CheckCan("create") then return end
 	local draft = ns.Capture.Draft()
 	if args ~= "" then draft.title = args end
 	if self.OpenEditor then self:OpenEditor(nil, draft) end
@@ -167,6 +167,10 @@ function commands.status(self)
 	end
 	if self.store then
 		self:Print(L["Discoveries in this guild: %d"]:format(self.store:Count()))
+		local rank = self:MyRank()
+		self:Print(L["Your rank: %s (%d), archivist: %s"]:format(self.rankNames[rank] or "?", rank or -1,
+			self:AmArchivist() and L["yes"] or L["no"]))
+		if not self.aclConfigured then self:Print(L["Guild permissions: not set up (only the Guild Master can write)."]) end
 	end
 	local global = self.db.global
 	self:Print(L["Saved data: session %d, first seen %s"]:format(global.sessions, date("%Y-%m-%d", global.firstSeen)))

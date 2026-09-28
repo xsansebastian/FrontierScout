@@ -146,3 +146,39 @@ L["Waypoints"] = true
 L["TomTom if installed, else the map pin"] = true
 L["Map pin only"] = true
 L["TomTom only"] = true
+
+-- Status (M3)
+L["Your rank: %s (%d), archivist: %s"] = true
+L["yes"] = true
+L["no"] = true
+L["Guild permissions: not set up (only the Guild Master can write)."] = true
+
+-- Permissions
+L["Your guild rank can't do that. Guild leadership sets this up in /fs config."] = true
+
+-- Browser (M3)
+L["Not set up for this guild yet: only the Guild Master can write. See /fs config."] = true
+
+-- Guild Setup
+L["Submit new discoveries"] = true
+L["Edit their own discoveries"] = true
+L["Edit anyone's discoveries"] = true
+L["Delete their own discoveries"] = true
+L["Delete anyone's discoveries"] = true
+L["Report outdated discoveries"] = true
+L["Archivists: minimum rank"] = true
+L["%s and above"] = true
+L["Everyone"] = true
+L["Guild Info is too long to add the FrontierScout tag. Shorten it and try again."] = true
+L["Guild permissions saved to Guild Info."] = true
+L["Current settings come from the guild's Guild Info."] = true
+L["This guild has no FrontierScout settings yet, so only the Guild Master can write."] = true
+L["Everyone can see all discoveries. Choose the lowest rank allowed to do each action."] = true
+L["Guild Info tag: %s"] = true
+L["Write to Guild Info"] = true
+L["Adds or updates the tag in Guild Info and leaves the rest of the text as it is."] = true
+L["Undo changes"] = true
+L["Archivists approve discoveries and share them with the guild. To make someone an archivist, add {FS:A} to their officer note (Guild & Communities > Roster). Their rank must also meet the archivist rank above."] = true
+L["none yet"] = true
+L["Archivists: %s"] = true
+L["Guild Setup"] = true

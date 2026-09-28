@@ -14,6 +14,7 @@ local ERRORS = {
 	npcID = L["The NPC ID must be a number."],
 	full = L["This guild has reached the discovery limit."],
 	missing = L["This discovery no longer exists."],
+	denied = L["Your guild rank can't do that. Guild leadership sets this up in /fs config."],
 }
 
 local function mapName(map)
@@ -142,6 +143,7 @@ function FS:OpenEditor(id, draft)
 	if not store then return end
 	local entry = id and store:Get(id)
 	if id and not entry then return end
+	if not self:CheckCan(entry and "edit" or "create", entry) then return end
 	hookLinks()
 	if self.editor then self.editor:Hide() end -- OnClose releases it
 

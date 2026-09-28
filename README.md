@@ -3,8 +3,9 @@ Crowdsourced discovery addon for World of Warcraft: Forever. Automatically recor
 
 ## Status
 
-Milestones **M1 (local atlas)** and **M2 (map surfaces)**: record discoveries, browse them by
-zone, see them on the world map, minimap and tooltips, and set waypoints.
+Milestones **M1 (local atlas)**, **M2 (map surfaces)** and **M3 (guild permissions)**: record
+discoveries, browse them by zone, see them on the world map, minimap and tooltips, set
+waypoints, and control by guild rank who may write.
 Discoveries are stored per guild, but they are **not shared yet**: guild sync arrives in M4.
 See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
 
@@ -35,6 +36,18 @@ See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
   `/fs waypoints native` or `/fs waypoints tomtom` forces one.
 
 You need to be in a guild: each guild has its own discoveries, and alts in other guilds don't see them.
+
+## Guild setup (leadership)
+
+Until a guild is set up, only the Guild Master can write. In `/fs config` → **Guild Setup**:
+
+1. Choose the lowest rank allowed to submit, edit or delete (own / anyone's), report, and to be an
+   archivist.
+2. Click **Write to Guild Info** (needs the "Edit Guild Info" guild permission). This adds a tag
+   such as `[FS1 s=5 eo=5 ea=1 do=5 da=1 r=9 ar=1]` to Guild Info and leaves the rest of the text
+   alone. Every member's addon reads it from there, so nobody can fake it.
+3. Make archivists by adding `{FS:A}` to their **officer note**. Archivists will approve
+   discoveries and share them with the guild once sync arrives.
 
 Libraries are already included in `Libs/`; nothing else to install.
 
