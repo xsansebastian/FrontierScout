@@ -167,7 +167,8 @@ function M.new(opts)
 	env.GetNumGuildMembers = function() return #state.roster end
 	env.GetGuildRosterInfo = function(i)
 		local m = state.roster[i]
-		return m.name, "Rank", m.rankIndex, 60, "Warrior", "Zone", "", m.officerNote or "", m.online
+		return m.name, "Rank", m.rankIndex, 60, "Warrior", "Zone", "", m.officerNote or "", m.online,
+			0, "WARRIOR", 0, 0, false, false, 0, m.guid
 	end
 	local ranks = opts.ranks or { "Guild Master", "Officer", "Member" }
 	env.GuildControlGetNumRanks = function() return #ranks end

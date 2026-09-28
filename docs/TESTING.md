@@ -4,6 +4,9 @@ The automated specs (`busted`) cover the logic, the sync protocol over a simulat
 and the UI on fake frames. They can't prove that Blizzard's API behaves as assumed on WoW
 Forever. This checklist is for the beta: one guild, a few testers, about a week (SPEC §11, M6).
 
+If something about names or permissions looks wrong, `/fs whoami` prints every name the game
+reports for you and how the roster sees you: include its output in the report.
+
 Install [BugSack](https://www.curseforge.com/wow/addons/bugsack) + BugGrabber to catch Lua errors,
 and turn on `/fs debug` while testing.
 

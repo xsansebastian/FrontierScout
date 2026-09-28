@@ -213,7 +213,15 @@ end
 - A rank's own/any rights combine: someone allowed to edit *any* entry may edit their own too.
 - Stores `fullName (Name-Realm) → { rankIndex, officerNoteHasTag, online }`.
 - All ACL and archivist checks go through the cache and use **current** rank at receive time.
-- Names are always normalized to `Name-Realm` (`Ambiguate` only for display).
+- Names are always normalized to `Name-Realm` internally (`Ambiguate` only for display).
+- **WoW Forever names** (found in the beta): characters are "Name Surname" (with a space) and are
+  whispered as `Name Surname` *without* the realm; `Name Surname-Realm` fails with "No player named
+  … is currently playing". Whisper targets therefore drop our own realm (`Guild.WhisperName`).
+- The player is found in the roster **by GUID** (`GetGuildRosterInfo` 17th return vs.
+  `UnitGUID("player")`), and that roster name is the player's identity, because `UnitFullName` can
+  differ from the roster name. The addon never whispers itself.
+- "Player not found" system messages caused by the addon's own whispers are hidden, and that
+  member is marked offline so nothing is resent to them.
 
 ### 4.6 Rank changes & revocation
 

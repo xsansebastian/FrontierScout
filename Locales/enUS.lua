@@ -284,3 +284,6 @@ L["Guild Info is too long for the tag: shorten it by %d characters."] = true
 L["Guild Info doesn't have the tag yet."] = true
 L["Check again"] = true
 L["Reads Guild Info again after you have edited it."] = true
+
+-- Diagnostics
+L["show how the game names you (for bug reports)"] = true

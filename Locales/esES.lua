@@ -229,3 +229,4 @@ L["Guild Info is too long for the tag: shorten it by %d characters."] = "La info
 L["Guild Info doesn't have the tag yet."] = "La información de la hermandad aún no tiene la etiqueta."
 L["Check again"] = "Comprobar de nuevo"
 L["Reads Guild Info again after you have edited it."] = "Vuelve a leer la información de la hermandad después de editarla."
+L["show how the game names you (for bug reports)"] = "muestra cómo te nombra el juego (para informar de errores)"

@@ -59,6 +59,25 @@ end
 -- WoW side -------------------------------------------------------------------
 
 local handlers = {}
+local recentWhispers = {} -- whisper target -> GetTime(), to hide "player not found" errors
+
+-- Our whispers to someone who just went offline make the game print "No
+-- player named '...' is currently playing." Hide those (they aren't the
+-- user's doing) and mark the player offline so nothing is resent to them.
+function Comm.FilterNotFound(_, _, text)
+	if not ERR_CHAT_PLAYER_NOT_FOUND_S or type(text) ~= "string" then return false end
+	for target, at in pairs(recentWhispers) do
+		if GetTime() - at > 10 then
+			recentWhispers[target] = nil
+		elseif text == ERR_CHAT_PLAYER_NOT_FOUND_S:format(target) then
+			local member = FS.roster[Guild.FullName(target, GetNormalizedRealmName())]
+			if member then member.online = false end
+			FS:Debug("whisper to %s failed: not online", target)
+			return true
+		end
+	end
+	return false
+end
 local limiter = Comm.NewRateLimiter(Comm.RATE_LIMIT, Comm.RATE_WINDOW)
 local queue = {}
 
@@ -73,6 +92,10 @@ end
 function FS:Send(t, payload, channel, target, prio)
 	if not self.guildKey then return false end
 	payload.v, payload.g, payload.t = Comm.PROTOCOL, self.guildKey, t
+	if channel == "WHISPER" then
+		target = Guild.WhisperName(target, GetNormalizedRealmName())
+		recentWhispers[target] = GetTime()
+	end
 	local item = { Comm.Encode(payload), channel, target, prio or "NORMAL" }
 	if Comm.Paused() then
 		if #queue < Comm.MAX_QUEUE then queue[#queue + 1] = item end
@@ -113,6 +136,9 @@ end
 
 FS:OnEnableHook(function()
 	FS:RegisterComm(Comm.PREFIX)
+	if ChatFrame_AddMessageEventFilter then
+		ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", Comm.FilterNotFound)
+	end
 	FS:ListenEvent("PLAYER_REGEN_ENABLED", function() FS:FlushQueue() end)
 	FS:ListenEvent("ZONE_CHANGED_NEW_AREA", function() FS:FlushQueue() end)
 end)

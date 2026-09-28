@@ -23,7 +23,7 @@ Review.RESEND_INTERVAL = 60
 -- Pure ---------------------------------------------------------------------------
 
 local function name(v)
-	return type(v) == "string" and #v <= 64 and v:find("-", 1, true) and v or nil
+	return type(v) == "string" and v ~= "" and #v <= 64 and v or nil
 end
 
 -- Validates a proposal from the network or the UI. Returns a clean copy or
@@ -89,9 +89,10 @@ local sentAt = {} -- pid -> GetTime() of the last PROP
 
 -- Online archivists other than the player, from the roster.
 function FS:OnlineArchivists()
-	local list, me = {}, self:PlayerName()
+	local list, me, myGuid = {}, self:PlayerName(), UnitGUID("player")
 	for member, info in pairs(self.roster) do
-		if info.online and member ~= me and self:IsArchivist(member) then list[#list + 1] = member end
+		local isMe = member == me or (info.guid ~= nil and info.guid == myGuid)
+		if info.online and not isMe and self:IsArchivist(member) then list[#list + 1] = member end
 	end
 	table.sort(list)
 	return list
@@ -101,6 +102,7 @@ end
 -- minute). Queued ones (acked by an archivist) only go again with `force`.
 function FS:FlushOutbox(force)
 	if not self.store then return 0 end
+	self:AdoptOwnOutbox()
 	local archivists = self:OnlineArchivists()
 	if #archivists == 0 then return 0 end
 	local sent = 0
@@ -116,6 +118,20 @@ function FS:FlushOutbox(force)
 		end
 	end
 	return sent
+end
+
+-- Once the player is an archivist, proposals still in their own outbox (sent
+-- before they were recognised as one) go straight into their review queue.
+function FS:AdoptOwnOutbox()
+	if not self:AmArchivist() then return end
+	local b = lists(self)
+	for pid, p in pairs(b.outbox) do
+		p.author = self:PlayerName()
+		b.outbox[pid] = nil
+		b.queue[pid] = p
+		if b.mine[pid] then b.mine[pid].status = "queued" end
+	end
+	self:SendMessage("FRONTIERSCOUT_QUEUE_CHANGED")
 end
 
 -- Creates a proposal for `op` on entry `eid` (nil for create). Returns the
@@ -193,6 +209,12 @@ local function decide(self, pid, status, reason, eid)
 	local d = { status = status, by = self:PlayerName(), at = GetServerTime(), reason = reason,
 		eid = eid or (p and p.eid), author = p and p.author }
 	b.decided[pid] = d
+	-- Our own proposal: the QDEC below doesn't come back to us, so update here.
+	b.outbox[pid] = nil
+	if b.mine[pid] then
+		b.mine[pid].status, b.mine[pid].reason = status, reason
+		self:SendMessage("FRONTIERSCOUT_PROPOSALS_CHANGED")
+	end
 	self:Send("QDEC", { pid = pid, s = status, r = reason, e = d.eid, a = d.author }, "GUILD", nil, "NORMAL")
 	self:SendMessage("FRONTIERSCOUT_QUEUE_CHANGED")
 	return d
