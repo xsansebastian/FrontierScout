@@ -182,3 +182,13 @@ L["Archivists approve discoveries and share them with the guild. To make someone
 L["none yet"] = true
 L["Archivists: %s"] = true
 L["Guild Setup"] = true
+
+-- Sync commands
+L["sync with online archivists now"] = true
+L["Last sync: %s; archivists online: %s"] = true
+L["never"] = true
+L["none seen"] = true
+
+-- Sync
+L["Sync is paused in combat and instances."] = true
+L["Looking for archivists..."] = true

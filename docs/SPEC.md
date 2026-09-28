@@ -345,11 +345,12 @@ must **ignore unknown categories** rather than error.
 | Type | Channel | From → To | Payload | Purpose |
 |---|---|---|---|---|
 | `HELLO` | GUILD | any → all | `root, count, role` | Announce presence after login (15–45 s random delay) |
-| `ARCH` | GUILD | archivist → all | `root, count` | Answer to `HELLO` / periodic beacon (≤ 1 per 10 min) |
+| `ARCH` | WHISPER / GUILD | archivist → member / all | `root, count` | Answer to `HELLO` by whisper; periodic beacon on GUILD (every 10 min) |
 | `SYNCREQ` | WHISPER | member → archivist | `buckets[64]` | Ask for diff when root differs |
 | `MANIFEST` | WHISPER | archivist → member | `{ [bucket] = { id=rev:approvedAt, ... } }` | Details for mismatched buckets only |
 | `WANT` | WHISPER | member → archivist | `ids[]` | Request entries the member lacks or has older |
-| `ENT` | WHISPER | archivist → member | `entries[]` (≤ 20 per msg) | Bulk transfer, `BULK` priority |
+| `ENT` | WHISPER | archivist → member | `entries[]` (≤ 20 per msg), `done` on the last | Bulk transfer, `BULK` priority |
+| `BUSY` | WHISPER | archivist → member | — | Already serving 2 members; retry another archivist or in 60–90 s |
 | `PROP` | WHISPER | contributor → each online archivist | `Proposal` | Submit |
 | `PACK` | WHISPER | archivist → contributor | `pid, status="queued"` | Ack. Contributor moves the item from `outbox` to `mine` |
 | `APPR` | GUILD | archivist → all | `Entry` (single) | Live push of a newly approved revision |
@@ -382,14 +383,30 @@ must **ignore unknown categories** rather than error.
    apply it. The proposal is marked decided in `QSYNC`, so other archivists drop it from their queues.
 3. Reject → `REJ` to the author (or held until the author's next `HELLO`).
 
+**Implementation notes (M4)**
+
+- An archivist answers a `HELLO` with a whispered `ARCH`, so a login doesn't make every archivist
+  talk on the guild channel. A `HELLO` with `role=A` from another archivist whose root differs
+  makes the receiver pull from it too, so archivists converge in both directions.
+- `WANT` goes in chunks of 100 ids; the archivist marks the last `ENT` of the last chunk `done`.
+- A member that finds, in a mismatched bucket, a local entry the archivist doesn't list and that is
+  older than the tombstone lifetime drops it: its deletion was already garbage-collected.
+- Until M5, only archivists' writes are canonical (pushed with `APPR`); a member's allowed writes
+  stay local.
+
 ### 6.6 Limits & throttling
 
 - ChatThrottleLib via AceComm: `ALERT` priority for control messages, `BULK` for `ENT`.
 - Maximum outgoing `ENT` bandwidth per archivist: ~1 KB/s. At most **2 concurrent member syncs**
   per archivist; others are told to retry later (`BUSY`).
-- Receive-side rate limit: messages from a single sender beyond 30/min are dropped (anti-spam).
-- Sync is **paused** in combat / instances and resumes on `PLAYER_REGEN_ENABLED` /
-  `ZONE_CHANGED_NEW_AREA`.
+- Receive-side rate limit: messages from a single sender beyond 30/min are dropped (anti-spam),
+  checked before decoding. The archivist a client is currently pulling from is exempt.
+- Received messages are capped at 256 KB encoded / 1 MB decompressed and decoded in `pcall`.
+- Sync is **paused** in combat / instances: outgoing messages are queued (up to 100) and sent on
+  `PLAYER_REGEN_ENABLED` / `ZONE_CHANGED_NEW_AREA`, after which the client pulls again if an
+  archivist's root differs.
+- AceComm sends through ChatThrottleLib, which doesn't surface `Enum.SendAddonMessageResult`;
+  lost messages are covered by timeouts (120 s per session) and the next `HELLO` / beacon.
 - Hard caps: 5,000 entries per guild. Oversized fields are truncated on receipt.
 
 ---
@@ -570,7 +587,7 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
 | M1 | Local atlas | Store, capture, edit dialog, browser (Discoveries tab), waypoints | Can create, browse and waypoint local entries. *Until M5, every write goes straight into the local canonical set, approved by its writer.* |
 | M2 | Map surfaces | World map pins, minimap pins, side panel, tooltips, filters, display options | Entries visible on all four surfaces |
 | M3 | Guild & ACL | guildKey isolation, roster cache, Guild Info tag, officer-note archivists, Guild Setup UI | ACL correctly gates UI in a 3-rank test guild. *Until M5, allowed writes still apply locally.* |
-| M4 | Sync | Digest, HELLO/ARCH, SYNCREQ…ENT, APPR live push | Two clients converge from empty and after divergent edits |
+| M4 | Sync | Digest, HELLO/ARCH, SYNCREQ…ENT, APPR live push | Two clients converge from empty and after divergent edits (`tests/sync_spec.lua`, over a simulated guild network with the real AceSerializer + LibDeflate) |
 | M5 | Curation | Proposals, outbox, review queue, QSYNC, reports, tombstones | End-to-end submit → approve → all members see it |
 | M6 | Polish | Notifications, localization scaffold (esES), perf pass (5k entries), docs | Beta testers in one guild for a week without data loss |
 

@@ -3,10 +3,10 @@ Crowdsourced discovery addon for World of Warcraft: Forever. Automatically recor
 
 ## Status
 
-Milestones **M1 (local atlas)**, **M2 (map surfaces)** and **M3 (guild permissions)**: record
-discoveries, browse them by zone, see them on the world map, minimap and tooltips, set
-waypoints, and control by guild rank who may write.
-Discoveries are stored per guild, but they are **not shared yet**: guild sync arrives in M4.
+Milestones **M1–M4**: record discoveries, browse them by zone, see them on the world map,
+minimap and tooltips, set waypoints, control by guild rank who may write, and **sync** the
+archivists' discoveries to every guild member through addon messages (no external server).
+Members' own submissions are still kept locally until the review queue arrives in M5.
 See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
 
 ## Install (development build)
@@ -60,6 +60,7 @@ Libraries are already included in `Libs/`; nothing else to install.
 | `/fs add [title]` | Record a discovery at your position (pre-filled from your target or the open vendor) |
 | `/fs waypoints [auto\|native\|tomtom]` | Show or set where waypoints go (auto = TomTom if installed) |
 | `/fs config` | Open the options |
+| `/fs sync` | Look for online archivists and sync now (otherwise automatic after login) |
 | `/fs status` | Addon version, client build and interface, guild, number of discoveries, saved-data session count |
 | `/fs version` | Addon version |
 | `/fs debug` | Toggle debug output |

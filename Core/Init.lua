@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
-local FS = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME, "AceConsole-3.0", "AceEvent-3.0")
+local FS = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME, "AceConsole-3.0", "AceEvent-3.0", "AceComm-3.0")
 ns.FS = FS
 
 local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
@@ -99,12 +99,13 @@ end
 -- Slash commands ----------------------------------------------------------
 
 local commands = {}
-local commandOrder = { "help", "add", "waypoints", "config", "status", "version", "debug" }
+local commandOrder = { "help", "add", "sync", "waypoints", "config", "status", "version", "debug" }
 local commandHelp = {
 	help = L["show this help"],
 	add = L["record a discovery here (optional: title)"],
 	waypoints = L["waypoint mode: auto, native or tomtom"],
 	config = L["open the options"],
+	sync = L["sync with online archivists now"],
 	status = L["show addon, client and guild status"],
 	version = L["show the addon version"],
 	debug = L["toggle debug output"],
@@ -148,6 +149,10 @@ function commands.waypoints(self, args)
 	self:Print(L["Waypoint mode: %s"]:format(self.db.profile.waypointMode))
 end
 
+function commands.sync(self)
+	self:SyncNow()
+end
+
 function commands.config(self)
 	if self.OpenOptions then self:OpenOptions() end
 end
@@ -171,6 +176,10 @@ function commands.status(self)
 		self:Print(L["Your rank: %s (%d), archivist: %s"]:format(self.rankNames[rank] or "?", rank or -1,
 			self:AmArchivist() and L["yes"] or L["no"]))
 		if not self.aclConfigured then self:Print(L["Guild permissions: not set up (only the Guild Master can write)."]) end
+		local sync = self:SyncStatus()
+		self:Print(L["Last sync: %s; archivists online: %s"]:format(
+			sync.lastFullSync and date("%Y-%m-%d %H:%M", sync.lastFullSync) or L["never"],
+			#sync.archivists > 0 and table.concat(sync.archivists, ", ") or L["none seen"]))
 	end
 	local global = self.db.global
 	self:Print(L["Saved data: session %d, first seen %s"]:format(global.sessions, date("%Y-%m-%d", global.firstSeen)))

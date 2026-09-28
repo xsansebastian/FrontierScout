@@ -1,10 +1,15 @@
 local wow = require("tests.helpers.wow")
 
-local Store
+local Store, Digest
 setup(function()
 	local _, _, ns = wow.boot()
-	Store = ns.Store
+	Store, Digest = ns.Store, ns.Digest
 end)
+
+-- Root of a digest rebuilt from scratch, to check incremental upkeep.
+local function ns_digest_root(store)
+	return Digest.New(store.bucket.entries):Root()
+end
 
 local function data(over)
 	local d = { cat = "npc", sub = "rare", title = "Old Grizzlegut", map = 1433, x = 0.45678, y = 0.1 }
@@ -190,5 +195,60 @@ describe("FS:SaveEntry / DeleteEntry", function()
 			if m[1] == "FRONTIERSCOUT_ENTRIES_CHANGED" then changed = changed + 1 end
 		end
 		assert.equals(3, changed)
+	end)
+end)
+
+describe("Store merging (sync)", function()
+	local store
+	before_each(function() store = Store.New({}) end)
+
+	local function canon(over)
+		local e = data({ id = "E-1", rev = 1, approvedAt = 100, approvedBy = "A-Realm", author = "Au-Realm", createdAt = 50 })
+		for k, v in pairs(over or {}) do e[k] = v end
+		return e
+	end
+
+	it("orders versions by rev, approvedAt, then approvedBy", function()
+		assert.is_true(Store.Newer({ rev = 2, approvedAt = 1 }, { rev = 1, approvedAt = 9 }))
+		assert.is_true(Store.Newer({ rev = 1, approvedAt = 9 }, { rev = 1, approvedAt = 1 }))
+		assert.is_true(Store.Newer({ rev = 1, approvedAt = 1, approvedBy = "B" }, { rev = 1, approvedAt = 1, approvedBy = "A" }))
+		assert.is_false(Store.Newer({ rev = 1, approvedAt = 1, approvedBy = "A" }, { rev = 1, approvedAt = 1, approvedBy = "A" }))
+	end)
+
+	it("applies newer entries and tombstones, refuses older ones", function()
+		assert.is_not_nil(store:Apply(canon()))
+		assert.same({ nil, "old" }, { store:Apply(canon()) })
+		assert.is_not_nil(store:Apply(canon({ rev = 2, title = "New" })))
+		assert.equals("New", store:Get("E-1").title)
+		local t = store:Apply({ id = "E-1", deleted = true, rev = 3, approvedAt = 300, approvedBy = "A-Realm" })
+		assert.is_true(t.deleted)
+		assert.is_nil(store:Get("E-1"))
+		assert.equals(1, store.digest.count)
+	end)
+
+	it("validates and cleans remote entries", function()
+		assert.same({ nil, "category" }, { store:Apply(canon({ cat = "route" })) })
+		assert.same({ nil, "invalid" }, { store:Apply(canon({ rev = 0 })) })
+		assert.same({ nil, "invalid" }, { store:Apply({ id = 5 }) })
+		local e = store:Apply(canon({ title = "|cffff0000Red|r", evil = "x", author = ("x"):rep(100) }))
+		assert.equals("Red", e.title)
+		assert.is_nil(e.evil)
+		assert.is_nil(e.author)
+	end)
+
+	it("keeps the digest in step with every change", function()
+		local e = store:Create(data(), ctx("E-1", 100))
+		store:Update(e.id, data({ title = "B" }), ctx("x", 200))
+		store:Delete(e.id, ctx("x", 300))
+		assert.equals(ns_digest_root(store), store.digest:Root())
+	end)
+
+	it("finds stale local entries whose tombstones are long gone", function()
+		store:Apply(canon({ id = "old", approvedAt = 1 }))
+		store:Apply(canon({ id = "new", approvedAt = 10 ^ 9 }))
+		local manifest = { [Digest.BucketOf("old")] = {}, [Digest.BucketOf("new")] = {} }
+		assert.same({ "old" }, store:Stale(manifest, 10 ^ 9 + 1))
+		store:Forget("old")
+		assert.is_nil(store:GetAny("old"))
 	end)
 end)

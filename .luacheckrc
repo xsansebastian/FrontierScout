@@ -7,6 +7,7 @@ self = false
 -- WoW API used by the addon. Keep sorted; add as modules grow.
 read_globals = {
 	"Ambiguate",
+	"bit",
 	"ButtonFrameTemplate_HidePortrait",
 	"C_AddOns",
 	"C_Club",

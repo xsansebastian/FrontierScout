@@ -2,7 +2,7 @@ local _, ns = ...
 
 -- Discovery entries of one guild bucket (docs/SPEC.md §5). Pure Lua, no WoW API:
 -- callers pass who/when in a context table { id = , by = , now = }.
-local Categories, Format = ns.Categories, ns.Format
+local Categories, Format, Digest = ns.Categories, ns.Format, ns.Digest
 
 local Store = {}
 Store.__index = Store
@@ -119,7 +119,86 @@ end
 
 function Store.New(bucket)
 	bucket.entries = bucket.entries or {}
-	return setmetatable({ bucket = bucket }, Store)
+	return setmetatable({ bucket = bucket, digest = Digest.New(bucket.entries) }, Store)
+end
+
+-- Conflict rule (SPEC §6.2): higher rev, then later approvedAt, then the
+-- lexically greater approvedBy wins. Is `a` newer than `b`?
+function Store.Newer(a, b)
+	if not b then return true end
+	if a.rev ~= b.rev then return a.rev > b.rev end
+	if a.approvedAt ~= b.approvedAt then return a.approvedAt > b.approvedAt end
+	return (a.approvedBy or "") > (b.approvedBy or "")
+end
+
+local function put(self, e)
+	self.bucket.entries[e.id] = e
+	self.digest:Set(e)
+end
+
+-- Validates a canonical entry received from another client: content for
+-- live entries, provenance for all. Returns a clean copy or nil, error.
+function Store.ValidateRemote(e)
+	if type(e) ~= "table" or type(e.id) ~= "string" or #e.id > 64 then return nil, "invalid" end
+	local rev, at = tonumber(e.rev), tonumber(e.approvedAt)
+	if not rev or rev < 1 or rev % 1 ~= 0 or not at then return nil, "invalid" end
+	local function name(v) return type(v) == "string" and #v <= 64 and v or nil end
+	local clean
+	if e.deleted then
+		clean = { deleted = true }
+	else
+		local err
+		clean, err = Store.Validate(e)
+		if not clean then return nil, err end
+		local flags = tonumber(e.flags)
+		clean.flags = flags and flags > 0 and math.floor(flags) or nil
+	end
+	clean.id = e.id
+	clean.rev = rev
+	clean.approvedAt = at
+	clean.createdAt = tonumber(e.createdAt)
+	clean.author = name(e.author)
+	clean.editedBy = name(e.editedBy)
+	clean.approvedBy = name(e.approvedBy)
+	return clean
+end
+
+-- Applies a canonical entry from another client when it is newer than ours
+-- (tombstones included). Returns the stored entry, or nil and a reason:
+-- Validate's codes, "invalid", "old", "full".
+function Store:Apply(e)
+	local clean, err = Store.ValidateRemote(e)
+	if not clean then return nil, err end
+	local cur = self.bucket.entries[clean.id]
+	if cur and not Store.Newer(clean, cur) then return nil, "old" end
+	if not cur and not clean.deleted and self:Count() >= Store.MAX_ENTRIES then return nil, "full" end
+	put(self, clean)
+	return clean
+end
+
+-- Local ids in `buckets` (a remote manifest) that the remote side doesn't
+-- have and that are older than the tombstone lifetime: their deletion was
+-- already garbage-collected elsewhere, so they are stale here.
+function Store:Stale(manifest, now)
+	local stale = {}
+	for id, e in pairs(self.bucket.entries) do
+		local b = Digest.BucketOf(id)
+		local remote = manifest[b]
+		if type(remote) == "table" and remote[id] == nil and now - (e.approvedAt or 0) > Store.TOMBSTONE_TTL then
+			stale[#stale + 1] = id
+		end
+	end
+	return stale
+end
+
+function Store:Forget(id)
+	self.bucket.entries[id] = nil
+	self.digest:Remove(id)
+end
+
+-- Raw entry or tombstone, for sync.
+function Store:GetAny(id)
+	return self.bucket.entries[id]
 end
 
 -- Live (non-deleted) entry by id.
@@ -159,7 +238,7 @@ function Store:Create(data, ctx)
 	e.editedBy = ctx.by
 	e.approvedBy = ctx.approvedBy or ctx.by
 	e.approvedAt = ctx.now
-	self.bucket.entries[e.id] = e
+	put(self, e)
 	return e
 end
 
@@ -178,7 +257,7 @@ function Store:Update(id, data, ctx)
 	e.approvedBy = ctx.approvedBy or ctx.by
 	e.approvedAt = ctx.now
 	e.flags = old.flags
-	self.bucket.entries[id] = e
+	put(self, e)
 	return e
 end
 
@@ -196,7 +275,7 @@ function Store:Delete(id, ctx)
 		approvedBy = ctx.approvedBy or ctx.by,
 		approvedAt = ctx.now,
 	}
-	self.bucket.entries[id] = t
+	put(self, t)
 	return t
 end
 
@@ -206,6 +285,7 @@ function Store:CollectGarbage(now)
 	for id, e in pairs(self.bucket.entries) do
 		if e.deleted and now - (e.approvedAt or 0) > Store.TOMBSTONE_TTL then
 			self.bucket.entries[id] = nil
+			self.digest:Remove(id)
 			removed = removed + 1
 		end
 	end
@@ -241,7 +321,10 @@ function FS:SaveEntry(id, data)
 	else
 		entry, err = store:Create(data, ctx)
 	end
-	if entry then self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED", entry.id) end
+	if entry then
+		self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED", entry.id)
+		self:SendMessage("FRONTIERSCOUT_LOCAL_WRITE", entry)
+	end
 	return entry, err
 end
 
@@ -250,6 +333,9 @@ function FS:DeleteEntry(id)
 	if not store then return nil, "noguild" end
 	if not self:Can("delete", store:Get(id)) then return nil, "denied" end
 	local t, err = store:Delete(id, context(self))
-	if t then self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED", id) end
+	if t then
+		self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED", id)
+		self:SendMessage("FRONTIERSCOUT_LOCAL_WRITE", t)
+	end
 	return t, err
 end

@@ -18,11 +18,14 @@ Core\Init.lua
 Core\Categories.lua
 Core\Format.lua
 Core\ACL.lua
+Core\Digest.lua
 Core\Store.lua
 Core\Query.lua
 Core\Guild.lua
 Core\Capture.lua
 Core\Waypoint.lua
+Core\Comm.lua
+Core\Sync.lua
 
 UI\Icons.lua
 UI\Widgets.lua

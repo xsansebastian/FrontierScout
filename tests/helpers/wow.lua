@@ -38,6 +38,20 @@ local function newAceDB(env)
 	}
 end
 
+-- The real AceSerializer and LibDeflate (pure Lua), loaded once.
+local realLibs
+local function loadRealLibs()
+	if realLibs then return realLibs end
+	local env = setmetatable({}, { __index = _G })
+	for _, path in ipairs({ "Libs/LibStub/LibStub.lua", "Libs/AceSerializer-3.0/AceSerializer-3.0.lua", "Libs/LibDeflate/LibDeflate.lua" }) do
+		local chunk = assert(loadfile(path))
+		setfenv(chunk, env)
+		chunk()
+	end
+	realLibs = { ["AceSerializer-3.0"] = env.LibStub("AceSerializer-3.0"), LibDeflate = env.LibStub("LibDeflate") }
+	return realLibs
+end
+
 local function newAceAddon(state)
 	return {
 		NewAddon = function(_, name)
@@ -47,6 +61,14 @@ local function newAceAddon(state)
 			end
 			function addon:Print(msg)
 				state.printed[#state.printed + 1] = msg
+			end
+			-- AceComm subset: messages go to state.bus (see tests/helpers/net.lua).
+			function addon:RegisterComm(prefix, method)
+				state.commPrefix, state.commMethod = prefix, method or "OnCommReceived"
+			end
+			function addon:SendCommMessage(prefix, text, distribution, target, prio)
+				state.sent[#state.sent + 1] = { prefix = prefix, text = text, distribution = distribution, target = target, prio = prio }
+				if state.bus then state.bus:Send(state, prefix, text, distribution, target) end
 			end
 			-- AceEvent subset: records registrations, delivers messages.
 			function addon:RegisterEvent(event, handler)
@@ -90,13 +112,15 @@ end
 -- `opts.guild` sets the player's guild name (nil = unguilded).
 function M.new(opts)
 	opts = opts or {}
-	local state = { chatCommands = {}, printed = {}, events = {}, messages = {}, messageHandlers = {} }
+	local state = { chatCommands = {}, printed = {}, events = {}, messages = {}, messageHandlers = {}, sent = {}, timers = {} }
 	local env = setmetatable({}, { __index = _G })
 
 	local libs = {
 		["AceAddon-3.0"] = newAceAddon(state),
 		["AceDB-3.0"] = newAceDB(env),
 		["AceLocale-3.0"] = newAceLocale(),
+		["AceSerializer-3.0"] = loadRealLibs()["AceSerializer-3.0"],
+		LibDeflate = loadRealLibs().LibDeflate,
 		-- Coordinate translation is set per test through state.translate(x, y, fromMap, toMap).
 		["HereBeDragons-2.0"] = {
 			TranslateZoneCoordinates = function(_, x, y, from, to)
@@ -115,6 +139,7 @@ function M.new(opts)
 		end,
 	}
 	env.date = os.date
+	env.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 	env.GetServerTime = function() return opts.now or 1790000000 end
 	env.GetBuildInfo = function() return "1.60.1", "70009", "Sep 25 2026", 16001 end
 	env.IsInGuild = function() return opts.guild ~= nil end
@@ -144,8 +169,17 @@ function M.new(opts)
 	env.SetGuildInfoText = function(text) state.guildInfo = text end
 	env.GetNormalizedRealmName = function() return "Realm" end
 	env.C_Club = { GetGuildClubId = function() return opts.clubId end }
-	env.UnitFullName = function() return "Scout", "Realm" end
-	env.UnitGUID = function(unit) if unit == "player" then return "Player-1234-0ABCDEF0" end end
+	-- opts.player = "Name" (realm "Realm"), default Scout.
+	state.player = opts.player or "Scout"
+	env.UnitFullName = function() return state.player, "Realm" end
+	env.UnitGUID = function(unit)
+		if unit == "player" then return opts.player and ("Player-1234-" .. opts.player) or "Player-1234-0ABCDEF0" end
+	end
+	-- Timers run when the test calls M.runTimers(state).
+	env.C_Timer = {
+		After = function(delay, fn) state.timers[#state.timers + 1] = { delay = delay, fn = fn } end,
+		NewTicker = function(interval, fn) state.tickers = state.tickers or {} state.tickers[#state.tickers + 1] = fn end,
+	}
 	env.InCombatLockdown = function() return false end
 	env.IsInInstance = function() return false end
 
@@ -186,6 +220,14 @@ function M.boot(opts)
 	ns.FS:OnInitialize()
 	state.printed = {}
 	return state, ns.FS, ns
+end
+
+-- Runs (and clears) pending C_Timer.After callbacks.
+function M.runTimers(state)
+	local pending = state.timers
+	state.timers = {}
+	for _, t in ipairs(pending) do t.fn() end
+	return #pending
 end
 
 -- Delivers a game event to the addon's registered handler.
