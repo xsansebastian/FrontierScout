@@ -190,8 +190,10 @@ function commands.whoami(self)
 	local heard = {}
 	for sender, how in pairs(self.heardOn or {}) do heard[#heard + 1] = ("%s via %s"):format(sender, how) end
 	table.sort(heard)
-	self:Print(("Channel: %s, number %s | last heard: %s"):format(tostring(self.commChannel),
-		tostring(self:CommChannel() or "not joined"), #heard > 0 and table.concat(heard, ", ") or "nobody"))
+	local channel = self:CommChannel()
+	self:Print(("Channel: %s, number %s | test message: %s | last heard: %s"):format(tostring(self.commChannel),
+		tostring(channel or "not joined"), channel and ns.Comm.Probe("CHANNEL", channel) or "-",
+		#heard > 0 and table.concat(heard, ", ") or "nobody"))
 end
 
 function commands.sync(self)

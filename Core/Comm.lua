@@ -117,9 +117,17 @@ end
 -- silently, so say so in debug, and resend a refused channel message once over
 -- the guild channel. AceComm calls back per chunk with (arg, sent, total,
 -- result), where result is a success boolean or a Enum.SendAddonMessageResult code.
+local lastProbe = -math.huge
 local function sentCallback(item, _, _, result)
 	if result == false or (type(result) == "number" and result ~= 0) then
 		FS:Debug("the game didn't send %s over %s (result %s)", tostring(item[6]), tostring(item.via), tostring(result))
+		-- AceComm only reports success or not: ask the game directly why (once a minute).
+		if GetTime() - lastProbe >= 60 then
+			lastProbe = GetTime()
+			local channel = item.via == "CHANNEL" and FS:CommChannel()
+			FS:Debug("direct test over %s: %s", tostring(item.via),
+				Comm.Probe(channel and "CHANNEL" or "GUILD", channel or nil))
+		end
 		if item.via == "CHANNEL" and not item.retried then
 			item.retried, item.via = true, "GUILD"
 			FS:SendCommMessage(item[1], item[2], item[3], item[4], item[5], sentCallback, item)
@@ -196,11 +204,11 @@ function FS:SendItem(item)
 	end
 end
 
--- Sends one test message straight through the game (bypassing the queue) and
--- returns what the game answered; for /fs whoami.
-function Comm.Probe()
+-- Sends one test message straight through the game (bypassing the queue) on
+-- GUILD, or on `distribution` / `target`, and returns what the game answered.
+function Comm.Probe(distribution, target)
 	if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) or not IsInGuild() then return "not available" end
-	local ok, result = pcall(C_ChatInfo.SendAddonMessage, "FScoutPing", "ping", "GUILD")
+	local ok, result = pcall(C_ChatInfo.SendAddonMessage, "FScoutPing", "ping", distribution or "GUILD", target)
 	if not ok then return "error: " .. tostring(result) end
 	if result == nil or result == true or result == 0 then return "sent" end
 	for key, value in pairs(Enum and Enum.SendAddonMessageResult or {}) do
