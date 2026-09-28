@@ -44,6 +44,8 @@ function fakeMethods:SetPoint(point, rel, relPoint, x, y)
 end
 function fakeMethods:ClearAllPoints() self.points = {} end
 function fakeMethods:GetWidth() return self.width or 0 end
+function fakeMethods:SetHeight(h) self.height = h end
+function fakeMethods:GetHeight() return self.height or 0 end
 function fakeMethods:GetChecked() return self.checked end
 function fakeMethods:SetChecked(on) self.checked = on end
 function fakeMethods:IsEnabled() return self.enabled ~= false end
@@ -102,7 +104,12 @@ function M.install(env, state)
 	env.YES, env.NO, env.CANCEL = "Yes", "No", "Cancel"
 	env.Ambiguate = function(name) return (name:gsub("%-.*", "")) end
 	env.C_Texture = { GetAtlasInfo = function() return nil end }
-	env.C_Item = { GetItemInfo = function(id) return "Item " .. id, "[Item " .. id .. "]" end }
+	env.C_Item = {
+		GetItemInfo = function(id)
+			return "Item " .. id, ("|cffffffff|Hitem:%d::::::::|h[Item %d]|h|r"):format(id, id)
+		end,
+		GetItemIconByID = function(id) return "icon" .. id end,
+	}
 	env.ChatFrameUtil = { InsertLink = function() end }
 
 	-- Map pins: HereBeDragons-Pins records icons per kind.

@@ -72,8 +72,12 @@ describe("WoW Forever names", function()
 		state.env.ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
 		FS:Send("TEST", {}, "WHISPER", "Gone Away-Realm")
 		assert.is_true(ns.Comm.FilterNotFound(nil, "CHAT_MSG_SYSTEM", "No player named 'Gone Away' is currently playing."))
-		assert.is_false(FS.roster["Gone Away-Realm"].online)
 		assert.is_false(ns.Comm.FilterNotFound(nil, "CHAT_MSG_SYSTEM", "No player named 'Someone Else' is currently playing."))
+		-- From now on they are reached over the guild channel.
+		FS:Send("TEST", {}, "WHISPER", "Gone Away-Realm")
+		local last = state.sent[#state.sent]
+		assert.equals("GUILD", last.distribution)
+		assert.equals("Gone Away-Realm", ns.Comm.Decode(last.text).to)
 	end)
 
 	it("/fs whoami prints the names the game reports", function()

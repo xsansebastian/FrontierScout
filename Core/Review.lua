@@ -94,6 +94,12 @@ function FS:OnlineArchivists()
 		local isMe = member == me or (info.guid ~= nil and info.guid == myGuid)
 		if info.online and not isMe and self:IsArchivist(member) then list[#list + 1] = member end
 	end
+	-- Archivists who just answered us are online even if the roster lags behind.
+	local listed = {}
+	for _, member in ipairs(list) do listed[member] = true end
+	for _, member in ipairs(self.SeenArchivists and self:SeenArchivists() or {}) do
+		if not listed[member] and member ~= me then list[#list + 1] = member end
+	end
 	table.sort(list)
 	return list
 end
@@ -304,7 +310,10 @@ local function enqueue(self, raw, from)
 	local b = lists(self)
 	if b.decided[p.pid] then return true, b.decided[p.pid] end
 	if b.queue[p.pid] then return true end
-	if from and p.author ~= from then return false end -- only your own proposals
+	-- A proposal sent to us is by its sender: the server vouches for that
+	-- name, so nobody can submit in someone else's name. (The name the
+	-- author's client put in can differ, e.g. "Name" vs "Name Surname".)
+	if from then p.author = from end
 	local ok, why = self:ProposalAllowed(p)
 	if not ok then
 		self:Debug("dropped proposal %s from %s: %s", p.pid, tostring(from), why)
@@ -321,7 +330,10 @@ end
 FS:OnMessageType("PROP", function(self, msg, sender)
 	if not self.store or not self:AmArchivist() then return end
 	local ok, decision = enqueue(self, msg.p, sender)
-	if not ok then return end
+	if not ok then
+		self:Debug("dropped a proposal from %s (invalid, not allowed, or queue full)", sender)
+		return
+	end
 	self:Send("PACK", { pid = msg.p.pid }, "WHISPER", sender, "ALERT")
 	if decision then
 		self:Send("QDEC", { pid = msg.p.pid, s = decision.status, r = decision.reason, e = decision.eid, a = decision.author },

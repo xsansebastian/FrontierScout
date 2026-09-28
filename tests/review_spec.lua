@@ -127,22 +127,39 @@ describe("Curation over the guild network", function()
 	it("keeps submissions until an archivist comes online", function()
 		local net = network()
 		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		arch.offline = true
 		mem.state.roster[1].online = false -- Arch is first in the roster
 		wow.fire(mem.state, "GUILD_ROSTER_UPDATE")
 		local p = mem.FS:SaveEntry(nil, data("Patient"))
 		net:Flush()
 		assert.equals("waiting", mine(mem, p.pid).status)
 		assert.equals(0, #arch.FS:QueueList())
+		-- Arch logs in; the member's roster notices a minute later.
+		arch.offline = false
+		mem.state.time = 2000
 		mem.state.roster[1].online = true
 		wow.fire(mem.state, "GUILD_ROSTER_UPDATE")
 		net:Flush()
 		assert.equals("queued", mine(mem, p.pid).status)
 	end)
 
-	it("archivists drop forged and unauthorized proposals", function()
+	it("sends to an archivist that answered even when the roster says offline", function()
+		local net = network()
+		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		mem.state.roster[1].online = false -- stale roster: Arch is actually online
+		wow.fire(mem.state, "GUILD_ROSTER_UPDATE")
+		mem.FS:SayHello(true) -- Arch answers with ARCH
+		net:Flush()
+		local p = mem.FS:SaveEntry(nil, data("Seen"))
+		net:Flush()
+		assert.equals("queued", mine(mem, p.pid).status)
+		assert.equals(1, #arch.FS:QueueList())
+	end)
+
+	it("credits proposals to their real sender and drops unauthorized ones", function()
 		local net = network({ { name = "Low", rank = 3 } })
 		local arch, mem, low = net:Client("Arch"), net:Client("Mem"), net:Client("Low")
-		-- Mem submits in Mem2's name.
+		-- Mem submits in Mem2's name: it counts as Mem's own submission.
 		mem.FS:Send("PROP", { p = { pid = "P-f", op = "create", eid = "E-f", author = "Mem2-Realm", at = 1, data = data("Forged") } },
 			"WHISPER", "Arch-Realm")
 		-- Low's rank may not submit (s=2).
@@ -153,7 +170,34 @@ describe("Curation over the guild network", function()
 		net:Flush()
 		mem.FS:Send("PROP", { p = { pid = "P-d", op = "delete", eid = e.id, author = "Mem-Realm", at = 1 } }, "WHISPER", "Arch-Realm")
 		net:Flush()
-		assert.equals(0, #arch.FS:QueueList())
+		local queue = arch.FS:QueueList()
+		assert.equals(1, #queue)
+		assert.equals("P-f", queue[1].pid)
+		assert.equals("Mem-Realm", queue[1].author)
+	end)
+
+	it("accepts a proposal whose author name differs from the sender's (Forever names)", function()
+		local net = network()
+		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		-- The member's client wrote its name differently than the server sends it.
+		mem.FS:Send("PROP", { p = { pid = "P-n", op = "create", eid = "E-n", author = "M-Realm", at = 1, data = data("Named") } },
+			"WHISPER", "Arch-Realm")
+		net:Flush()
+		assert.equals("Mem-Realm", arch.FS:QueueList()[1].author)
+	end)
+
+	it("sends curation messages over the guild channel, addressed to one player", function()
+		local net = network()
+		local mem = net:Client("Mem")
+		mem.FS:Send("PACK", { pid = "x" }, "WHISPER", "Arch-Realm")
+		local last = mem.state.sent[#mem.state.sent]
+		assert.equals("GUILD", last.distribution)
+		assert.equals("Arch-Realm", mem.ns.Comm.Decode(last.text).to)
+		-- Mem2 gets it on the guild channel too, but it isn't for them.
+		local got
+		net:Client("Mem2").FS:OnMessageType("PACK", function() got = true end)
+		net:Flush()
+		assert.is_nil(got)
 	end)
 
 	it("deletes and edits through proposals", function()

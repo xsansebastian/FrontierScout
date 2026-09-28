@@ -170,6 +170,18 @@ function commands.whoami(self)
 	end
 	self:Print(("Can read officer notes: %s | archivist rank: %s | archivist: %s"):format(
 		tostring(self:CanViewOfficerNotes()), tostring(self.acl.ar), tostring(self:AmArchivist())))
+	local members = 0
+	for _ in pairs(self.roster) do members = members + 1 end
+	local archivists = {}
+	for _, member in ipairs(self:ListArchivists()) do
+		archivists[#archivists + 1] = member .. (self.roster[member].online and " (online)" or " (offline)")
+	end
+	self:Print(("Roster: %d members loaded | guild setup tag: %s | archivists: %s"):format(members,
+		tostring(self.aclConfigured), #archivists > 0 and table.concat(archivists, ", ") or "none"))
+	local seen = self.SeenArchivists and self:SeenArchivists() or {}
+	self:Print(("Archivists seen on the network: %s | send submissions to: %s"):format(
+		#seen > 0 and table.concat(seen, ", ") or "none",
+		self.OnlineArchivists and table.concat(self:OnlineArchivists(), ", ") or "?"))
 end
 
 function commands.sync(self)

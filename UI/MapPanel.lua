@@ -51,7 +51,7 @@ local function showDetail(e)
 	if not e then return end
 	Icons.Apply(d.icon, e.sub)
 	d.title:SetText(e.title)
-	d.text:SetText(Widgets.DetailText(e))
+	d.view:SetEntry(e)
 	Widgets.Gate(d.edit, FS:Can("edit", e))
 end
 
@@ -166,11 +166,9 @@ local function build()
 	d.title:SetPoint("LEFT", d.icon, "RIGHT", 4, 0)
 	d.title:SetPoint("RIGHT", -2, 0)
 	d.title:SetJustifyH("LEFT")
-	d.text = d:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	d.text:SetPoint("TOPLEFT", d.icon, "BOTTOMLEFT", 0, -6)
-	d.text:SetPoint("BOTTOMRIGHT", 0, 30)
-	d.text:SetJustifyH("LEFT")
-	d.text:SetJustifyV("TOP")
+	d.view = Widgets.NewDetailView(d, "GameFontHighlightSmall")
+	d.view:SetPoint("TOPLEFT", d.icon, "BOTTOMLEFT", 0, -6)
+	d.view:SetPoint("RIGHT", -2, 0)
 	d.back = Widgets.Button(d, L["Back"], 60, function()
 		state.selected = nil
 		refresh()
@@ -222,3 +220,9 @@ FS:Listen("FRONTIERSCOUT_GUILD_CHANGED", function()
 end)
 FS:Listen("FRONTIERSCOUT_DISPLAY_CHANGED", function() refresh() end)
 FS:Listen("FRONTIERSCOUT_ROSTER_UPDATED", function() refresh() end)
+
+-- Item names fill in once the client has loaded the item data.
+FS:ListenEvent("GET_ITEM_INFO_RECEIVED", function()
+	local d = panel and panel:IsShown() and panel.detail
+	if d and d:IsShown() and d.entry and d.entry.items then d.view:SetEntry(d.entry) end
+end)

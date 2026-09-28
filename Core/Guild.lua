@@ -101,7 +101,13 @@ function FS:RequestRoster()
 	local now = GetTime()
 	if self.rosterRequested and now - self.rosterRequested < 15 then return end
 	self.rosterRequested = now
-	if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() end
+	-- Older clients only have the global GuildRoster(); without a request the
+	-- roster only loads when the player opens the guild window.
+	if C_GuildInfo and C_GuildInfo.GuildRoster then
+		C_GuildInfo.GuildRoster()
+	elseif GuildRoster then
+		GuildRoster()
+	end
 end
 
 -- Rebuilds the roster cache, rank names and ACL from the game.
@@ -116,6 +122,10 @@ function FS:UpdateRoster()
 		end
 	end
 	self.roster = Guild.BuildRoster(rows, realm)
+	-- Still empty (the server hasn't answered yet): ask again once the throttle allows.
+	if IsInGuild() and next(self.roster) == nil and C_Timer then
+		C_Timer.After(16, function() self:RequestRoster() end)
+	end
 	self.rankNames = {}
 	for i = 1, IsInGuild() and GuildControlGetNumRanks() or 0 do
 		self.rankNames[i - 1] = GuildControlGetRankName(i)
