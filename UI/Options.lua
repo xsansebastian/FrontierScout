@@ -74,22 +74,6 @@ local function rankValues()
 	return values
 end
 
--- Writes the draft thresholds into Guild Info. Returns true or false, reason.
-function FS:WriteGuildSetup(t)
-	if not CanEditGuildInfo() then return false, "denied" end
-	local text, err = ACL.Apply(GetGuildInfoText(), t)
-	if not text then
-		self:Print(L["Guild Info is too long to add the FrontierScout tag. Shorten it and try again."])
-		return false, err
-	end
-	SetGuildInfoText(text)
-	self.acl, self.aclConfigured = ACL.Parse(text)
-	self:Print(L["Guild permissions saved to Guild Info."])
-	self:SendMessage("FRONTIERSCOUT_ROSTER_UPDATED")
-	self:RequestRoster()
-	return true
-end
-
 local function guildSetup()
 	local args = {
 		intro = {
@@ -116,23 +100,50 @@ local function guildSetup()
 			disabled = function() return not FS.store end,
 		}
 	end
-	args.preview = {
-		type = "description",
+	-- Addons can't write Guild Info, so the tag is shown for copying.
+	args.tag = {
+		type = "input",
 		order = 20,
-		name = function() return L["Guild Info tag: %s"]:format(ACL.Format(currentDraft())) end,
+		width = "full",
+		name = L["Guild Info tag: select it and press Ctrl+C to copy"],
+		get = function() return ACL.Format(currentDraft()) end,
+		set = function() end, -- read-only: edits are ignored
 	}
-	args.write = {
-		type = "execute",
+	args.howto = {
+		type = "description",
 		order = 21,
-		width = "double",
-		name = L["Write to Guild Info"],
-		desc = L["Adds or updates the tag in Guild Info and leaves the rest of the text as it is."],
-		disabled = function() return not (FS.store and CanEditGuildInfo()) end,
-		func = function() FS:WriteGuildSetup(currentDraft()) end,
+		name = L["Paste it on its own line in Guild Info (Guild & Communities > Guild Info, needs the \"Edit Guild Info\" permission). Replace any older [FS1 ...] tag and keep the rest of the text. Every member's addon reads it within a minute."],
+	}
+	args.status = {
+		type = "description",
+		order = 22,
+		fontSize = "medium",
+		name = function()
+			if not FS.store then return "" end
+			local state, extra = ACL.SetupStatus(GetGuildInfoText(), currentDraft())
+			if state == "applied" then
+				return "|cff33ff33" .. L["Guild Info has these settings."] .. "|r"
+			elseif state == "differs" then
+				return "|cffff8800" .. L["Guild Info has other settings: %s"]:format(extra) .. "|r"
+			elseif state == "toolong" then
+				return "|cffff5555" .. L["Guild Info is too long for the tag: shorten it by %d characters."]:format(extra) .. "|r"
+			end
+			return "|cffff8800" .. L["Guild Info doesn't have the tag yet."] .. "|r"
+		end,
+	}
+	args.recheck = {
+		type = "execute",
+		order = 23,
+		name = L["Check again"],
+		desc = L["Reads Guild Info again after you have edited it."],
+		func = function()
+			FS:UpdateRoster()
+			FS:RequestRoster()
+		end,
 	}
 	args.reset = {
 		type = "execute",
-		order = 22,
+		order = 24,
 		name = L["Undo changes"],
 		func = function() draft = nil end,
 	}
@@ -191,36 +202,77 @@ local function otherGuilds()
 	return names
 end
 
+-- One tab per topic, so no page is too long for the window.
 function FS:GetOptionsTable()
 	local edgeGet, edgeSet = setting("minimap", "edge")
 	local chatGet, chatSet = setting("notify", "chat")
 	local toastGet, toastSet = setting("notify", "toast")
+	local guild = guildSetup()
+	guild.order = 3
 	return {
 		type = "group",
 		name = "FrontierScout",
+		childGroups = "tab",
 		args = {
-			worldmap = pinGroup("worldmap", L["World map"], 1),
-			minimap = pinGroup("minimap", L["Minimap"], 2, {
-				edge = { type = "toggle", order = 4, name = L["Keep distant pins on the minimap edge"], get = edgeGet, set = edgeSet },
-			}),
-			notify = {
+			map = {
 				type = "group",
-				inline = true,
-				order = 3.5,
-				name = L["Notifications"],
+				order = 1,
+				name = L["Map"],
 				args = {
-					chat = { type = "toggle", order = 1, width = "full", name = L["Chat message when discoveries arrive in my zone"], get = chatGet, set = chatSet },
-					toast = { type = "toggle", order = 2, width = "full", name = L["On-screen message when discoveries arrive in my zone"], get = toastGet, set = toastSet },
+					worldmap = pinGroup("worldmap", L["World map"], 1),
+					minimap = pinGroup("minimap", L["Minimap"], 2, {
+						edge = { type = "toggle", order = 4, width = "full", name = L["Keep distant pins on the minimap edge"], get = edgeGet, set = edgeSet },
+					}),
 				},
 			},
+			general = {
+				type = "group",
+				order = 2,
+				name = L["General"],
+				args = {
+					tooltips = {
+						type = "toggle",
+						order = 1,
+						name = L["Show discoveries in NPC and item tooltips"],
+						width = "full",
+						get = function() return FS.db.profile.tooltips end,
+						set = function(_, v) FS.db.profile.tooltips = v end,
+					},
+					waypointMode = {
+						type = "select",
+						order = 2,
+						width = "double",
+						name = L["Waypoints"],
+						values = {
+							auto = L["TomTom if installed, else the map pin"],
+							native = L["Map pin only"],
+							tomtom = L["TomTom only"],
+						},
+						get = function() return FS.db.profile.waypointMode end,
+						set = function(_, v) FS.db.profile.waypointMode = v end,
+					},
+					notify = {
+						type = "group",
+						inline = true,
+						order = 3,
+						name = L["Notifications"],
+						args = {
+							chat = { type = "toggle", order = 1, width = "full", name = L["Chat message when discoveries arrive in my zone"], get = chatGet, set = chatSet },
+							toast = { type = "toggle", order = 2, width = "full", name = L["On-screen message when discoveries arrive in my zone"], get = toastGet, set = toastSet },
+						},
+					},
+				},
+			},
+			guild = guild,
 			data = {
 				type = "group",
-				order = 5,
+				order = 4,
 				name = L["Data"],
 				args = {
 					others = {
 						type = "description",
 						order = 1,
+						fontSize = "medium",
 						name = function()
 							local names = otherGuilds()
 							return L["Other guilds with stored data: %s"]:format(#names > 0 and table.concat(names, ", ") or L["none"])
@@ -249,35 +301,6 @@ function FS:GetOptionsTable()
 					},
 				},
 			},
-			guild = guildSetup(),
-			general = {
-				type = "group",
-				inline = true,
-				order = 3,
-				name = L["General"],
-				args = {
-					tooltips = {
-						type = "toggle",
-						order = 1,
-						name = L["Show discoveries in NPC and item tooltips"],
-						width = "full",
-						get = function() return FS.db.profile.tooltips end,
-						set = function(_, v) FS.db.profile.tooltips = v end,
-					},
-					waypointMode = {
-						type = "select",
-						order = 2,
-						name = L["Waypoints"],
-						values = {
-							auto = L["TomTom if installed, else the map pin"],
-							native = L["Map pin only"],
-							tomtom = L["TomTom only"],
-						},
-						get = function() return FS.db.profile.waypointMode end,
-						set = function(_, v) FS.db.profile.waypointMode = v end,
-					},
-				},
-			},
 		},
 	}
 end
@@ -288,5 +311,7 @@ end
 
 FS:OnEnableHook(function()
 	LibStub("AceConfig-3.0"):RegisterOptionsTable(ADDON_NAME, function() return FS:GetOptionsTable() end)
-	LibStub("AceConfigDialog-3.0"):AddToBlizOptions(ADDON_NAME, "FrontierScout")
+	local dialog = LibStub("AceConfigDialog-3.0")
+	dialog:SetDefaultSize(ADDON_NAME, 760, 640) -- the /fs config window
+	dialog:AddToBlizOptions(ADDON_NAME, "FrontierScout")
 end)

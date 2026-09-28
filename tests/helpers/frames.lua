@@ -31,6 +31,19 @@ function fakeMethods:IsShown() return self.shown end
 function fakeMethods:SetText(text) self.text = text end
 function fakeMethods:GetText() return self.text end
 function fakeMethods:GetStringHeight() return 12 end
+-- Text width: about 6 px per character.
+function fakeMethods:GetStringWidth() return #(self.text or "") * 6 end
+-- Buttons keep their text on themselves.
+function fakeMethods:GetFontString() return self end
+function fakeMethods:SetWidth(w) self.width = w end
+-- Anchors are recorded as { point, relativeTo, relativePoint, x, y }.
+function fakeMethods:SetPoint(point, rel, relPoint, x, y)
+	self.points = self.points or {}
+	if type(rel) == "number" then rel, relPoint, x, y = nil, nil, rel, relPoint end
+	self.points[#self.points + 1] = { point, rel, relPoint, x, y }
+end
+function fakeMethods:ClearAllPoints() self.points = {} end
+function fakeMethods:GetWidth() return self.width or 0 end
 function fakeMethods:GetChecked() return self.checked end
 function fakeMethods:SetChecked(on) self.checked = on end
 function fakeMethods:IsEnabled() return self.enabled ~= false end
@@ -134,6 +147,7 @@ function M.install(env, state)
 	}
 	state.libs["AceConfigDialog-3.0"] = {
 		AddToBlizOptions = function() end,
+		SetDefaultSize = function(_, _, w, h) state.optionsSize = { w, h } end,
 		Open = function(_, name) state.optionsOpened = name end,
 	}
 

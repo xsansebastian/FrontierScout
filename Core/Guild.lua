@@ -42,8 +42,9 @@ function Guild.FullName(name, realm)
 	return name .. "-" .. realm
 end
 
--- Roster cache from rows { name, rankIndex, officerNote, online }:
--- fullName -> { rankIndex, officerNoteHasTag, online }.
+-- Roster cache from rows { name, guid, rankIndex, officerNote, online }:
+-- fullName -> { rankIndex, officerNoteHasTag, online, guid }.
+-- On WoW Forever names are "Name Surname" (with a space).
 function Guild.BuildRoster(rows, realm)
 	local roster = {}
 	for _, row in ipairs(rows) do
@@ -53,10 +54,20 @@ function Guild.BuildRoster(rows, realm)
 				rankIndex = row.rankIndex,
 				officerNoteHasTag = ACL.NoteHasTag(row.officerNote),
 				online = row.online and true or false,
+				guid = row.guid,
 			}
 		end
 	end
 	return roster
+end
+
+-- The name to whisper: without our own realm. WoW Forever addresses players
+-- as "Name Surname" and rejects "Name Surname-Realm".
+function Guild.WhisperName(fullName, realm)
+	if type(fullName) ~= "string" then return fullName end
+	local base, suffix = fullName:match("^(.-)%-([^%-]+)$")
+	if base and suffix == realm then return base end
+	return fullName
 end
 
 -- WoW side -----------------------------------------------------------------
@@ -65,7 +76,11 @@ FS.acl, FS.aclConfigured = ACL.Parse(nil)
 FS.roster = {}
 FS.rankNames = {}
 
+-- The player's name as the guild roster has it (found by GUID once the
+-- roster has loaded), so it matches what other members see. Before that,
+-- UnitFullName.
 function FS:PlayerName()
+	if self.selfName then return self.selfName end
 	local name, realm = UnitFullName("player")
 	return name .. "-" .. (realm or GetNormalizedRealmName())
 end
@@ -92,13 +107,15 @@ end
 -- Rebuilds the roster cache, rank names and ACL from the game.
 function FS:UpdateRoster()
 	local rows = {}
+	local realm, myGuid = GetNormalizedRealmName(), UnitGUID("player")
 	if IsInGuild() then
 		for i = 1, GetNumGuildMembers() or 0 do
-			local name, _, rankIndex, _, _, _, _, officerNote, online = GetGuildRosterInfo(i)
-			rows[#rows + 1] = { name = name, rankIndex = rankIndex, officerNote = officerNote, online = online }
+			local name, _, rankIndex, _, _, _, _, officerNote, online, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
+			rows[#rows + 1] = { name = name, guid = guid, rankIndex = rankIndex, officerNote = officerNote, online = online }
+			if guid and guid == myGuid then self.selfName = Guild.FullName(name, realm) end
 		end
 	end
-	self.roster = Guild.BuildRoster(rows, GetNormalizedRealmName())
+	self.roster = Guild.BuildRoster(rows, realm)
 	self.rankNames = {}
 	for i = 1, IsInGuild() and GuildControlGetNumRanks() or 0 do
 		self.rankNames[i - 1] = GuildControlGetRankName(i)

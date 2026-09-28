@@ -7,6 +7,7 @@ local FS, L = ns.FS, ns.L
 local Categories, Query, Icons, Widgets = ns.Categories, ns.Query, ns.Icons, ns.Widgets
 
 local WIDTH = 260
+local LIST_TOP = -96 -- below the title, search box and two rows of toggles
 
 local panel, toggle
 local state = { text = "", selected = nil }
@@ -94,25 +95,15 @@ local function setShown(on)
 	end
 end
 
+-- Category toggles in a 2 x 2 grid: four in a row don't fit the panel.
 local function buildFilters(parent)
-	local anchor
-	for _, cat in ipairs(Categories.order) do
-		local b = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-		b:SetSize(22, 22)
-		if anchor then
-			b:SetPoint("LEFT", anchor, "RIGHT", 36, 0)
-		else
-			b:SetPoint("TOPLEFT", 6, -48)
-		end
-		local label = b:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-		label:SetPoint("LEFT", b, "RIGHT", -2, 1)
-		label:SetText(Categories.Label(cat))
-		b:SetChecked(FS.db.profile.worldmap.cats[cat])
-		b:SetScript("OnClick", function(btn)
+	for i, cat in ipairs(Categories.order) do
+		local b = Widgets.CheckBox(parent, Categories.Label(cat), FS.db.profile.worldmap.cats[cat], function(btn)
 			FS.db.profile.worldmap.cats[cat] = btn:GetChecked() and true or false
 			FS:SendMessage("FRONTIERSCOUT_DISPLAY_CHANGED")
 		end)
-		anchor = b
+		local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
+		b:SetPoint("TOPLEFT", 6 + col * (WIDTH / 2), -48 - row * 22)
 	end
 end
 
@@ -145,7 +136,7 @@ local function build()
 	buildFilters(panel)
 
 	local list, bar, view = Widgets.NewList(panel)
-	list:SetPoint("TOPLEFT", 4, -74)
+	list:SetPoint("TOPLEFT", 4, LIST_TOP)
 	list:SetPoint("BOTTOMRIGHT", -20, 34)
 	view:SetElementInitializer("Button", rowInit)
 	ScrollUtil.InitScrollBoxListWithScrollBar(list, bar, view)
@@ -166,7 +157,7 @@ local function build()
 
 	-- Detail view, in place of the list.
 	local d = CreateFrame("Frame", nil, panel)
-	d:SetPoint("TOPLEFT", 4, -74)
+	d:SetPoint("TOPLEFT", 4, LIST_TOP)
 	d:SetPoint("BOTTOMRIGHT", -4, 34)
 	d.icon = d:CreateTexture(nil, "ARTWORK")
 	d.icon:SetSize(20, 20)

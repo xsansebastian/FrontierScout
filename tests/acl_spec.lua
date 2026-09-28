@@ -32,13 +32,17 @@ describe("ACL tag", function()
 			ACL.Format({ s = 5, eo = 5, ea = 1, ["do"] = 5, da = 1, r = 9, ar = 1 }))
 	end)
 
-	it("replaces or appends the tag and leaves the rest alone", function()
+	it("tells whether Guild Info has the wanted settings", function()
 		local t = { s = 2, eo = 2, ea = 1, ["do"] = 2, da = 1, r = 9, ar = 1 }
-		local tag = ACL.Format(t)
-		assert.equals(tag, ACL.Apply("", t))
-		assert.equals("Hello\n" .. tag, ACL.Apply("Hello  \n", t))
-		assert.equals("A " .. tag .. " B", ACL.Apply("A [FS1 s=0] B", t))
-		assert.same({ nil, "toolong" }, { ACL.Apply(("x"):rep(480), t) })
+		assert.equals("applied", ACL.SetupStatus("Hi\n" .. ACL.Format(t), t))
+		-- Keys in another order or missing defaults still count as the same settings.
+		assert.equals("applied", ACL.SetupStatus("[FS1 ar=1 s=2 eo=2 ea=1 do=2 da=1]", t))
+		assert.same({ "differs", "[FS1 s=0]" }, { ACL.SetupStatus("A [FS1 s=0] B", t) })
+		assert.equals("missing", ACL.SetupStatus("", t))
+		assert.equals("missing", ACL.SetupStatus(nil, t))
+		local status, over = ACL.SetupStatus(("x"):rep(480), t)
+		assert.equals("toolong", status)
+		assert.equals(480 + 1 + #ACL.Format(t) - 500, over)
 	end)
 end)
 

@@ -100,13 +100,14 @@ end
 -- Slash commands ----------------------------------------------------------
 
 local commands = {}
-local commandOrder = { "help", "add", "sync", "waypoints", "config", "status", "version", "debug" }
+local commandOrder = { "help", "add", "sync", "waypoints", "config", "status", "whoami", "version", "debug" }
 local commandHelp = {
 	help = L["show this help"],
 	add = L["record a discovery here (optional: title)"],
 	waypoints = L["waypoint mode: auto, native or tomtom"],
 	config = L["open the options"],
 	sync = L["sync with online archivists now"],
+	whoami = L["show how the game names you (for bug reports)"],
 	status = L["show addon, client and guild status"],
 	version = L["show the addon version"],
 	debug = L["toggle debug output"],
@@ -148,6 +149,27 @@ function commands.waypoints(self, args)
 		self:Print(L["Unknown waypoint mode: %s"]:format(mode))
 	end
 	self:Print(L["Waypoint mode: %s"]:format(self.db.profile.waypointMode))
+end
+
+-- Every name the game reports for the player, and how the roster sees them.
+function commands.whoami(self)
+	local name, realm = UnitFullName("player")
+	local guid = UnitGUID("player")
+	self:Print(("UnitName: %s | UnitFullName: %s / %s | realm: %s"):format(
+		tostring(UnitName("player")), tostring(name), tostring(realm), tostring(GetNormalizedRealmName())))
+	self:Print(("PlayerName: %s | GUID: %s"):format(self:PlayerName(), tostring(guid)))
+	if GetPlayerInfoByGUID and guid then
+		local _, _, _, _, _, gname, grealm = GetPlayerInfoByGUID(guid)
+		self:Print(("GetPlayerInfoByGUID: %s / %s"):format(tostring(gname), tostring(grealm)))
+	end
+	for i = 1, IsInGuild() and GetNumGuildMembers() or 0 do
+		local rname, _, rank, _, _, _, _, note, _, _, _, _, _, _, _, _, rguid = GetGuildRosterInfo(i)
+		if rguid == guid then
+			self:Print(("Roster: %s | rank %s | officer note: %s"):format(tostring(rname), tostring(rank), tostring(note)))
+		end
+	end
+	self:Print(("Can read officer notes: %s | archivist rank: %s | archivist: %s"):format(
+		tostring(self:CanViewOfficerNotes()), tostring(self.acl.ar), tostring(self:AmArchivist())))
 end
 
 function commands.sync(self)

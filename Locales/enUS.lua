@@ -169,14 +169,9 @@ L["Report outdated discoveries"] = true
 L["Archivists: minimum rank"] = true
 L["%s and above"] = true
 L["Everyone"] = true
-L["Guild Info is too long to add the FrontierScout tag. Shorten it and try again."] = true
-L["Guild permissions saved to Guild Info."] = true
 L["Current settings come from the guild's Guild Info."] = true
 L["This guild has no FrontierScout settings yet, so only the Guild Master can write."] = true
 L["Everyone can see all discoveries. Choose the lowest rank allowed to do each action."] = true
-L["Guild Info tag: %s"] = true
-L["Write to Guild Info"] = true
-L["Adds or updates the tag in Guild Info and leaves the rest of the text as it is."] = true
 L["Undo changes"] = true
 L["Archivists approve discoveries and share them with the guild. To make someone an archivist, add {FS:A} to their officer note (Guild & Communities > Roster). Their rank must also meet the archivist rank above."] = true
 L["none yet"] = true
@@ -276,3 +271,19 @@ L["Delete the discoveries stored for guilds you are not in?"] = true
 L["Reset this guild's data and sync again"] = true
 L["Clear this guild's local discoveries and download them again from an archivist? Your submissions are kept."] = true
 L["Archivists can only reset while another archivist is online, so the guild's data isn't lost."] = true
+
+-- Options tabs
+L["Map"] = true
+
+-- Guild Setup (copy tag)
+L["Guild Info tag: select it and press Ctrl+C to copy"] = true
+L["Paste it on its own line in Guild Info (Guild & Communities > Guild Info, needs the \"Edit Guild Info\" permission). Replace any older [FS1 ...] tag and keep the rest of the text. Every member's addon reads it within a minute."] = true
+L["Guild Info has these settings."] = true
+L["Guild Info has other settings: %s"] = true
+L["Guild Info is too long for the tag: shorten it by %d characters."] = true
+L["Guild Info doesn't have the tag yet."] = true
+L["Check again"] = true
+L["Reads Guild Info again after you have edited it."] = true
+
+-- Diagnostics
+L["show how the game names you (for bug reports)"] = true
