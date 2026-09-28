@@ -65,6 +65,7 @@ read_globals = {
 	"tinsert",
 	"TomTom",
 	"TooltipDataProcessor",
+	"UIErrorsFrame",
 	"UiMapPoint",
 	"UIParent",
 	"UISpecialFrames",

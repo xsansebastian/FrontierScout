@@ -245,7 +245,7 @@ L["Dismiss"] = true
 L["Warnings"] = true
 L["Sync"] = true
 L["Sync now"] = true
-L["Discoveries: %d (including deletions still spreading: %d)"] = true
+L["Discoveries: %d (%d records, counting deletions still spreading)"] = true
 L["Last full sync: %s"] = true
 L["Archivists seen: %s"] = true
 L["Your role: %s"] = true
@@ -253,3 +253,26 @@ L["archivist"] = true
 L["member"] = true
 L["Syncing with %s..."] = true
 L["Data hash: %08x"] = true
+
+-- Browser (M6)
+L["new"] = true
+L["New since last login"] = true
+
+-- Notifications
+L["New discovery in %s: %s (%s)"] = true
+L["%d new discoveries in %s"] = true
+
+-- Options (M6)
+L["Removed data of %d other guild(s)."] = true
+L["Local data cleared. Syncing again..."] = true
+L["Notifications"] = true
+L["Chat message when discoveries arrive in my zone"] = true
+L["On-screen message when discoveries arrive in my zone"] = true
+L["Data"] = true
+L["Other guilds with stored data: %s"] = true
+L["none"] = true
+L["Delete data of other guilds"] = true
+L["Delete the discoveries stored for guilds you are not in?"] = true
+L["Reset this guild's data and sync again"] = true
+L["Clear this guild's local discoveries and download them again from an archivist? Your submissions are kept."] = true
+L["Archivists can only reset while another archivist is online, so the guild's data isn't lost."] = true

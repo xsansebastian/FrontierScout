@@ -3,7 +3,8 @@ local _, ns = ...
 -- Curation (docs/SPEC.md §5.3-5.4, §6.4-6.5): members' writes become
 -- proposals that an archivist approves or rejects.
 --   PROP    (whisper) contributor -> each online archivist   submit
---   PACK    (whisper) archivist -> contributor               queued, remove from outbox
+--   PACK    (whisper) archivist -> contributor               queued (kept in the outbox until decided)
+--   QMISS   (whisper) archivist -> contributor               unknown proposal: send it again
 --   QDEC    (guild / whisper) archivist                      a decision: approved / rejected
 --   QSYNC   (whisper) archivist <-> archivist                pending queue + recent decisions
 -- Approved changes reach everyone as APPR (Sync).
@@ -96,14 +97,17 @@ function FS:OnlineArchivists()
 	return list
 end
 
--- Sends waiting proposals to every online archivist (each at most once a minute).
+-- Sends waiting proposals to every online archivist (each at most once a
+-- minute). Queued ones (acked by an archivist) only go again with `force`.
 function FS:FlushOutbox(force)
 	if not self.store then return 0 end
 	local archivists = self:OnlineArchivists()
 	if #archivists == 0 then return 0 end
 	local sent = 0
-	for pid, p in pairs(lists(self).outbox) do
-		if force or not sentAt[pid] or GetTime() - sentAt[pid] >= Review.RESEND_INTERVAL then
+	local b = lists(self)
+	for pid, p in pairs(b.outbox) do
+		local queued = b.mine[pid] and b.mine[pid].status == "queued"
+		if force or (not queued and (not sentAt[pid] or GetTime() - sentAt[pid] >= Review.RESEND_INTERVAL)) then
 			sentAt[pid] = GetTime()
 			for _, archivist in ipairs(archivists) do
 				self:Send("PROP", { p = p }, "WHISPER", archivist, "NORMAL")
@@ -305,13 +309,35 @@ end)
 
 FS:OnMessageType("PACK", function(self, msg, sender)
 	if not self.store or not self:IsArchivist(sender) or type(msg.pid) ~= "string" then return end
-	local b = lists(self)
-	if b.outbox[msg.pid] then
-		b.outbox[msg.pid] = nil
-		if b.mine[msg.pid] and b.mine[msg.pid].status == "waiting" then b.mine[msg.pid].status = "queued" end
+	local mine = lists(self).mine[msg.pid]
+	if mine and mine.status == "waiting" then
+		mine.status = "queued"
 		self:SendMessage("FRONTIERSCOUT_PROPOSALS_CHANGED")
 	end
 end)
+
+-- An archivist doesn't know one of our queued proposals (e.g. it reset its
+-- data): send it again.
+FS:OnMessageType("QMISS", function(self, msg, sender)
+	if not self.store or not self:IsArchivist(sender) or type(msg.pid) ~= "string" then return end
+	local b = lists(self)
+	local p, mine = b.outbox[msg.pid], b.mine[msg.pid]
+	if p and mine and mine.status == "queued" then
+		mine.status = "waiting"
+		sentAt[msg.pid] = GetTime()
+		self:Send("PROP", { p = p }, "WHISPER", sender, "NORMAL")
+		self:SendMessage("FRONTIERSCOUT_PROPOSALS_CHANGED")
+	end
+end)
+
+-- Ids of our proposals that are queued but not decided yet, for HELLO.
+function FS:OpenProposals()
+	local open = {}
+	for pid, s in pairs(self.store and lists(self).mine or {}) do
+		if s.status == "queued" and #open < 50 then open[#open + 1] = pid end
+	end
+	return open
+end
 
 local function applyDecision(self, pid, d)
 	local b = lists(self)
@@ -368,17 +394,24 @@ FS:OnMessageType("QSYNC", function(self, msg, sender)
 	end
 end)
 
--- An archivist meeting another archivist swaps queues; meeting a member,
--- it re-sends decisions on that member's proposals (they may have been offline).
+-- An archivist meeting another archivist swaps queues. A member's HELLO lists
+-- its open proposals: the archivist answers with decisions it knows (the
+-- member may have been offline) and QMISS for ones it has never seen.
 FS:OnMessageType("HELLO", function(self, msg, sender)
 	if not self.store or not self:AmArchivist() then return end
 	if msg.role == "A" and self:IsArchivist(sender) then
 		sendQueue(self, sender)
 		return
 	end
-	for pid, d in pairs(lists(self).decided) do
-		if d.author == sender then
+	if type(msg.open) ~= "table" then return end
+	local b = lists(self)
+	for i, pid in ipairs(msg.open) do
+		if i > 50 then break end
+		local d = type(pid) == "string" and b.decided[pid]
+		if d then
 			self:Send("QDEC", { pid = pid, s = d.status, r = d.reason, e = d.eid, a = d.author }, "WHISPER", sender, "NORMAL")
+		elseif type(pid) == "string" and not b.queue[pid] then
+			self:Send("QMISS", { pid = pid }, "WHISPER", sender, "NORMAL")
 		end
 	end
 end)

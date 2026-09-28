@@ -62,7 +62,6 @@ describe("Curation over the guild network", function()
 		assert.equals("waiting", mine(mem, p.pid).status)
 		net:Flush()
 		assert.equals("queued", mine(mem, p.pid).status)
-		assert.is_nil(mem.FS.store.bucket.outbox[p.pid])
 		assert.equals(1, #arch.FS:QueueList())
 
 		local e = arch.FS:Approve(p.pid)
@@ -71,6 +70,7 @@ describe("Curation over the guild network", function()
 		net:Flush()
 		for _, c in ipairs({ arch, mem, mem2 }) do assert.same({ "Hidden chest" }, titles(c)) end
 		assert.equals("approved", mine(mem, p.pid).status)
+		assert.is_nil(mem.FS.store.bucket.outbox[p.pid])
 		assert.matches("was approved", mem.state.printed[#mem.state.printed], 1, true)
 		assert.equals(0, #arch.FS:QueueList())
 	end)
@@ -90,6 +90,37 @@ describe("Curation over the guild network", function()
 		assert.equals("rejected", mine(mem, p.pid).status)
 		assert.equals("We already have this one", mine(mem, p.pid).reason)
 		assert.same({}, titles(mem))
+	end)
+
+	it("resends a queued proposal an archivist lost", function()
+		local net = network()
+		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		local p = mem.FS:SaveEntry(nil, data("Lost"))
+		net:Flush()
+		assert.equals("queued", mine(mem, p.pid).status)
+		arch.FS.store.bucket.queue = {} -- e.g. the archivist reset its data
+		mem.FS:SayHello(true)
+		net:Flush()
+		assert.equals(1, #arch.FS:QueueList())
+		assert.equals("queued", mine(mem, p.pid).status)
+	end)
+
+	it("only re-sends decisions the author is still waiting for", function()
+		local net = network()
+		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		for i = 1, 5 do
+			local p = mem.FS:SaveEntry(nil, data("Old " .. i))
+			net:Flush()
+			arch.FS:Approve(p.pid)
+			net:Flush()
+		end
+		local before = #arch.state.sent
+		mem.FS:SayHello(true)
+		net:Flush()
+		for i = before + 1, #arch.state.sent do
+			local msg = arch.ns.Comm.Decode(arch.state.sent[i].text)
+			assert.are_not.equal("QDEC", msg.t)
+		end
 	end)
 
 	it("keeps submissions until an archivist comes online", function()

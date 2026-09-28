@@ -1,6 +1,6 @@
 # FrontierScout — Specification
 
-> Status: **Draft v0.1** — for review before any implementation.
+> Status: **v0.1, implemented (M0–M6)**; in-game verification pending (docs/TESTING.md).
 > Target: **WoW Forever** (Blizzard, beta as of Sept 2026, launch Nov 4 2026), which runs the
 > Mainline (Midnight, 12.x) UI/API.
 
@@ -43,7 +43,7 @@ telling guildmates about. Discoveries are:
 | Maps | `C_Map` (uiMapID-based). Positions stored as uiMapID + normalized x/y. |
 | Comms | `C_ChatInfo.SendAddonMessage` via AceComm, channels `GUILD` and `WHISPER` only. |
 | Waypoints | `C_Map.SetUserWaypoint` + `C_SuperTrack` (native) or TomTom API. |
-| Midnight restrictions | Addon comms and some unit data are restricted in combat / instanced content, and some values can be *secret* (`issecretvalue`). FrontierScout is open-world only and **pauses all sync while `InCombatLockdown()` or `IsInInstance()`**, checks the `Enum.SendAddonMessageResult` return value, and never reads unit data that is secret. |
+| Midnight restrictions | Addon comms and some unit data are restricted in combat / instanced content, and some values can be *secret* (`issecretvalue`). FrontierScout is open-world only and **pauses all sync while `InCombatLockdown()` or `IsInInstance()`** (outgoing messages are queued), and never reads unit data that is secret. See §6.6 on send results. |
 
 ### 2.1 Embedded libraries
 
@@ -349,7 +349,7 @@ must **ignore unknown categories** rather than error.
 
 | Type | Channel | From → To | Payload | Purpose |
 |---|---|---|---|---|
-| `HELLO` | GUILD | any → all | `root, count, role` | Announce presence after login (15–45 s random delay) |
+| `HELLO` | GUILD | any → all | `root, count, role, open` | Announce presence after login (15–45 s random delay); `open` = up to 50 ids of my queued, undecided proposals |
 | `ARCH` | WHISPER / GUILD | archivist → member / all | `root, count` | Answer to `HELLO` by whisper; periodic beacon on GUILD (every 10 min) |
 | `SYNCREQ` | WHISPER | member → archivist | `buckets[64]` | Ask for diff when root differs |
 | `MANIFEST` | WHISPER | archivist → member | `{ [bucket] = { id=rev:approvedAt, ... } }` | Details for mismatched buckets only |
@@ -357,9 +357,10 @@ must **ignore unknown categories** rather than error.
 | `ENT` | WHISPER | archivist → member | `entries[]` (≤ 20 per msg), `done` on the last | Bulk transfer, `BULK` priority |
 | `BUSY` | WHISPER | archivist → member | — | Already serving 2 members; retry another archivist or in 60–90 s |
 | `PROP` | WHISPER | contributor → each online archivist | `Proposal` | Submit (resent at most once a minute until acked) |
-| `PACK` | WHISPER | archivist → contributor | `pid` | Ack. Contributor removes the item from `outbox`; `mine` shows "queued" |
+| `PACK` | WHISPER | archivist → contributor | `pid` | Ack: `mine` shows "queued"; the proposal stays in `outbox` (not resent) until decided |
+| `QMISS` | WHISPER | archivist → contributor | `pid` | Answer to an `open` id the archivist has neither queued nor decided: the contributor sends it again |
 | `APPR` | GUILD | archivist → all | `Entry` (single) | Live push of a newly approved revision |
-| `QDEC` | GUILD / WHISPER | archivist → all / author | `pid, s=approved\|rejected, r=reason, e=eid, a=author` | A decision. On GUILD it clears other archivists' queues and tells an online author; re-whispered to an author on their next `HELLO` (replaces `REJ`) |
+| `QDEC` | GUILD / WHISPER | archivist → all / author | `pid, s=approved\|rejected, r=reason, e=eid, a=author` | A decision. On GUILD it clears other archivists' queues and tells an online author; whispered for each `open` id in a later `HELLO` (replaces `REJ`) |
 | `QSYNC` | WHISPER | archivist ↔ archivist | pending queue + decisions | Sent when archivists meet (`HELLO` role A / `ARCH`) |
 
 ### 6.5 Flows
@@ -489,10 +490,12 @@ Tabs:
 
 - Display: enable world map / minimap pins, icon scale, minimap radius, per-category filters.
 - Waypoints: `Auto (TomTom if loaded)` / `Native only` / `TomTom only`.
-- Notifications: chat message and/or toast when new entries arrive in my current zone.
+- Notifications: chat message and/or on-screen message (`UIErrorsFrame`) when new entries (not
+  edits) arrive in my current zone; one summary line for a batch.
 - Guild Setup (leadership): ACL thresholds with rank names, tag preview, "Write to Guild Info",
   and a checklist of how to tag archivists in officer notes.
-- Data: purge stale guild buckets, reset local data and resync.
+- Data: purge stale guild buckets, reset local data and resync (for archivists only while another
+  archivist is online, so the guild's data can't be lost).
 
 ---
 
@@ -589,12 +592,17 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
 | # | Milestone | Scope | Exit criteria |
 |---|---|---|---|
 | M0 | Scaffold | TOC, libs, DB, slash cmd, luacheck/busted CI | Loads on Forever beta with no Lua errors |
-| M1 | Local atlas | Store, capture, edit dialog, browser (Discoveries tab), waypoints | Can create, browse and waypoint local entries. *Until M5, every write goes straight into the local canonical set, approved by its writer.* |
+| M1 | Local atlas | Store, capture, edit dialog, browser (Discoveries tab), waypoints | Can create, browse and waypoint local entries |
 | M2 | Map surfaces | World map pins, minimap pins, side panel, tooltips, filters, display options | Entries visible on all four surfaces |
-| M3 | Guild & ACL | guildKey isolation, roster cache, Guild Info tag, officer-note archivists, Guild Setup UI | ACL correctly gates UI in a 3-rank test guild. *Until M5, allowed writes still apply locally.* |
+| M3 | Guild & ACL | guildKey isolation, roster cache, Guild Info tag, officer-note archivists, Guild Setup UI | ACL correctly gates UI in a 3-rank test guild (`tests/acl_spec.lua`, `tests/guildsetup_spec.lua`) |
 | M4 | Sync | Digest, HELLO/ARCH, SYNCREQ…ENT, APPR live push | Two clients converge from empty and after divergent edits (`tests/sync_spec.lua`, over a simulated guild network with the real AceSerializer + LibDeflate) |
-| M5 | Curation | Proposals, outbox, review queue, QSYNC, reports, tombstones | End-to-end submit → approve → all members see it |
-| M6 | Polish | Notifications, localization scaffold (esES), perf pass (5k entries), docs | Beta testers in one guild for a week without data loss |
+| M5 | Curation | Proposals, outbox, review queue, QSYNC, reports, tombstones | End-to-end submit → approve → all members see it (`tests/review_spec.lua`) |
+| M6 | Polish | Notifications, "new since last login", data options, full esES/esMX locale, perf pass (5k entries), docs | Beta testers in one guild for a week without data loss (**pending**, docs/TESTING.md) |
+
+**Performance (M6):** at 5,000 entries, `Store:Count` is kept incrementally (creating the cap
+went from 1.6 s to 0.3 s in plain Lua), search text is cached per entry (a browser refresh is
+~15 ms after the first search), world map pin frames are built for the shown zone only (the
+whole continent only on a continent map), and `tests/polish_spec.lua` keeps budgets on these.
 
 ---
 

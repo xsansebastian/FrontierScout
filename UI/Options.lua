@@ -155,8 +155,46 @@ end
 
 FS:Listen("FRONTIERSCOUT_GUILD_CHANGED", function() draft = nil end)
 
+-- Data (SPEC §7.8) ------------------------------------------------------------------
+
+-- Removes the stored data of every guild except the current one.
+function FS:PurgeOtherGuilds()
+	local removed = 0
+	for key in pairs(self.db.global.guilds) do
+		if key ~= self.guildKey then
+			self.db.global.guilds[key] = nil
+			removed = removed + 1
+		end
+	end
+	self:Print(L["Removed data of %d other guild(s)."]:format(removed))
+	return removed
+end
+
+-- Drops this guild's discoveries (keeping your submissions) and syncs again.
+function FS:ResetGuildData()
+	if not self.store then return end
+	local bucket = self.store.bucket
+	bucket.entries, bucket.syncState, bucket.queue, bucket.decided = {}, {}, {}, {}
+	self.store = ns.Store.New(bucket)
+	self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED")
+	self:SendMessage("FRONTIERSCOUT_QUEUE_CHANGED")
+	self:Print(L["Local data cleared. Syncing again..."])
+	self:SayHello(true)
+end
+
+local function otherGuilds()
+	local names = {}
+	for key, bucket in pairs(FS.db.global.guilds) do
+		if key ~= FS.guildKey then names[#names + 1] = (bucket.meta and bucket.meta.name) or key end
+	end
+	table.sort(names)
+	return names
+end
+
 function FS:GetOptionsTable()
 	local edgeGet, edgeSet = setting("minimap", "edge")
+	local chatGet, chatSet = setting("notify", "chat")
+	local toastGet, toastSet = setting("notify", "toast")
 	return {
 		type = "group",
 		name = "FrontierScout",
@@ -165,6 +203,52 @@ function FS:GetOptionsTable()
 			minimap = pinGroup("minimap", L["Minimap"], 2, {
 				edge = { type = "toggle", order = 4, name = L["Keep distant pins on the minimap edge"], get = edgeGet, set = edgeSet },
 			}),
+			notify = {
+				type = "group",
+				inline = true,
+				order = 3.5,
+				name = L["Notifications"],
+				args = {
+					chat = { type = "toggle", order = 1, width = "full", name = L["Chat message when discoveries arrive in my zone"], get = chatGet, set = chatSet },
+					toast = { type = "toggle", order = 2, width = "full", name = L["On-screen message when discoveries arrive in my zone"], get = toastGet, set = toastSet },
+				},
+			},
+			data = {
+				type = "group",
+				order = 5,
+				name = L["Data"],
+				args = {
+					others = {
+						type = "description",
+						order = 1,
+						name = function()
+							local names = otherGuilds()
+							return L["Other guilds with stored data: %s"]:format(#names > 0 and table.concat(names, ", ") or L["none"])
+						end,
+					},
+					purge = {
+						type = "execute",
+						order = 2,
+						width = "double",
+						name = L["Delete data of other guilds"],
+						confirm = true,
+						confirmText = L["Delete the discoveries stored for guilds you are not in?"],
+						disabled = function() return #otherGuilds() == 0 end,
+						func = function() FS:PurgeOtherGuilds() end,
+					},
+					reset = {
+						type = "execute",
+						order = 3,
+						width = "double",
+						name = L["Reset this guild's data and sync again"],
+						confirm = true,
+						confirmText = L["Clear this guild's local discoveries and download them again from an archivist? Your submissions are kept."],
+						desc = L["Archivists can only reset while another archivist is online, so the guild's data isn't lost."],
+						disabled = function() return not FS.store or (FS:AmArchivist() and #FS:OnlineArchivists() == 0) end,
+						func = function() FS:ResetGuildData() end,
+					},
+				},
+			},
 			guild = guildSetup(),
 			general = {
 				type = "group",

@@ -104,7 +104,12 @@ function FS:SayHello(force)
 	if not force and sync.lastHello and now() - sync.lastHello < HELLO_THROTTLE then return false end
 	sync.lastHello = now()
 	local d = digest(self)
-	self:Send("HELLO", { root = d:Root(), count = d.count, role = self:AmArchivist() and "A" or "M" }, "GUILD", nil, "ALERT")
+	self:Send("HELLO", {
+		root = d:Root(),
+		count = d.count,
+		role = self:AmArchivist() and "A" or "M",
+		open = self.OpenProposals and self:OpenProposals() or nil,
+	}, "GUILD", nil, "ALERT")
 	return true
 end
 
@@ -190,12 +195,20 @@ FS:OnMessageType("WANT", function(self, msg, sender)
 end)
 
 -- Applies canonical entries from an archivist; returns how many were new.
+-- Announces entries that are new here (not edits or deletions) with
+-- FRONTIERSCOUT_ENTRIES_RECEIVED, for notifications.
 local function applyAll(self, list)
-	local applied = 0
+	local applied, fresh = 0, {}
 	for _, e in ipairs(list) do
-		if self.store:Apply(e) then applied = applied + 1 end
+		local existed = type(e) == "table" and self.store:Get(e.id) ~= nil
+		local stored = self.store:Apply(e)
+		if stored then
+			applied = applied + 1
+			if not existed and not stored.deleted then fresh[#fresh + 1] = stored end
+		end
 	end
 	if applied > 0 then self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED") end
+	if #fresh > 0 then self:SendMessage("FRONTIERSCOUT_ENTRIES_RECEIVED", fresh) end
 	return applied
 end
 

@@ -58,6 +58,11 @@ function Query.NewMapResolver(getMapInfo)
 		return false
 	end
 
+	function r.Type(map)
+		local info = map and map > 0 and getMapInfo(map) or nil
+		return info and info.mapType or nil
+	end
+
 	function r.Name(map)
 		local info = map and map > 0 and getMapInfo(map) or nil
 		return info and info.name or nil
@@ -66,16 +71,26 @@ function Query.NewMapResolver(getMapInfo)
 	return r
 end
 
+-- Lower-cased search text per entry. Entries are replaced, never mutated, on
+-- change, so the cache (weak keys) stays valid.
+local hayCache = setmetatable({}, { __mode = "k" })
+
 local function haystack(e)
+	local cached = hayCache[e]
+	if cached then return cached end
 	local parts = { e.title, Format.PlainText(e.desc), e.npcID and tostring(e.npcID) or "" }
 	for _, tag in ipairs(e.tags or {}) do parts[#parts + 1] = tag end
 	for _, item in ipairs(e.items or {}) do parts[#parts + 1] = tostring(item.id) end
-	return table.concat(parts, "\n"):lower()
+	cached = table.concat(parts, "\n"):lower()
+	hayCache[e] = cached
+	return cached
 end
 
--- filter = { text = "search", cats = { npc = true, ... } (nil = all), zone = mapID (nil = all) }
+-- filter = { text = "search", cats = { npc = true, ... } (nil = all), zone = mapID (nil = all),
+--            newSince = serverTime (nil = all) }
 function Query.Matches(e, filter, resolver)
 	if filter.cats and not filter.cats[e.cat] then return false end
+	if filter.newSince and (e.approvedAt or 0) <= filter.newSince then return false end
 	if filter.zone and resolver.Zone(e.map) ~= filter.zone then return false end
 	local text = filter.text and Format.Trim(filter.text) or ""
 	if text ~= "" and not haystack(e):find(text:lower(), 1, true) then return false end

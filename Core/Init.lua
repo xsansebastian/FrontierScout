@@ -27,6 +27,7 @@ local defaults = {
 		minimap = { enabled = true, scale = 1, edge = false, cats = { npc = true, location = true, item = true, event = true } },
 		panel = { shown = true },
 		tooltips = true,
+		notify = { chat = true, toast = false },
 	},
 }
 

@@ -13,6 +13,7 @@
 embeds.xml
 
 Locales\enUS.lua
+Locales\esES.lua
 
 Core\Init.lua
 Core\Categories.lua
@@ -31,6 +32,7 @@ Core\Review.lua
 UI\Icons.lua
 UI\Widgets.lua
 UI\Tooltip.lua
+UI\Notify.lua
 UI\EditDialog.lua
 UI\Browser.lua
 UI\ReviewTab.lua

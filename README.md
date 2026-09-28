@@ -1,13 +1,21 @@
 # FrontierScout
-Crowdsourced discovery addon for World of Warcraft: Forever. Automatically records new quest givers, rares, recipes and vendors as you play and shares them with other players via addon messaging, filling the gap before the databases catch up.
+A guild-private atlas of discoveries for World of Warcraft: Forever: rares, vendors and their
+stock, treasures, caves, secrets, lore, notable items and timed events. Guildmates record what
+they find, archivists review it, and every member gets the same atlas through addon messages,
+with no external server, filling the gap before the databases catch up.
 
 ## Status
 
-Milestones **M1–M5**: record discoveries, browse them by zone, see them on the world map,
-minimap and tooltips, set waypoints, control by guild rank who may write, **review**
-submissions, and **sync** the approved atlas to every guild member through addon messages
-(no external server).
-See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
+All milestones of [docs/SPEC.md](docs/SPEC.md) (M0–M6) are implemented. Everything is covered
+by automated specs, but **nothing has run in the game yet**: the next step is a beta week in
+one guild, following [docs/TESTING.md](docs/TESTING.md).
+
+- Record discoveries in seconds (position, target NPC, vendor stock) and browse them by zone.
+- World map and minimap pins, a side panel on the map, tooltips on NPCs and items.
+- Waypoints through TomTom or Blizzard's map pin.
+- Guild isolation, rank-based permissions set in Guild Info, archivists set in officer notes.
+- Review queue, and sync of the approved atlas to every member.
+- English and Spanish (esES / esMX).
 
 ## Install (development build)
 
@@ -31,7 +39,8 @@ See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
 - **Tooltips:** NPCs with a discovery and items that are noted or sold by a recorded vendor get a
   FrontierScout line.
 - **Options:** `/fs config` or the game's AddOns settings: pins per category, icon size,
-  tooltips, waypoints.
+  tooltips, notifications for new discoveries in your zone, waypoints, guild setup, and data
+  clean-up (other guilds' data, reset and resync).
 - **Waypoints** go to TomTom when it is installed, otherwise to Blizzard's map pin.
   `/fs waypoints native` or `/fs waypoints tomtom` forces one.
 

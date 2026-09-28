@@ -253,7 +253,7 @@ table.insert(ns.BrowserPages, {
 		local archivists = {}
 		for i, name in ipairs(s.archivists) do archivists[i] = Ambiguate(name, "guild") end
 		frame.text:SetText(table.concat({
-			L["Discoveries: %d (including deletions still spreading: %d)"]:format(FS.store and FS.store:Count() or 0, s.count),
+			L["Discoveries: %d (%d records, counting deletions still spreading)"]:format(FS.store and FS.store:Count() or 0, s.count),
 			L["Last full sync: %s"]:format(s.lastFullSync and when(s.lastFullSync) or L["never"]),
 			L["Archivists seen: %s"]:format(#archivists > 0 and table.concat(archivists, ", ") or L["none seen"]),
 			L["Your role: %s"]:format(FS:AmArchivist() and L["archivist"] or L["member"]),

@@ -49,7 +49,8 @@ local function entryRowInit(row, data)
 	row.label:ClearAllPoints()
 	row.label:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
 	row.label:SetPoint("RIGHT", row.count, "LEFT", -4, 0)
-	row.label:SetText(data.title)
+	local isNew = FS.newSince and (data.approvedAt or 0) > FS.newSince and data.editedBy ~= FS:PlayerName()
+	row.label:SetText(isNew and (data.title .. " |cff33ff33" .. L["new"] .. "|r") or data.title)
 	row.count:SetText(Categories.Label(data.sub))
 	row.bg:SetShown(data.id == state.selected)
 end
@@ -89,7 +90,8 @@ function refresh()
 	local all = store and store:All() or {}
 
 	-- Zones count entries that pass the search and category filters.
-	local zoneFilter = { text = state.filter.text, cats = state.filter.cats }
+	state.filter.newSince = state.newOnly and (FS.newSince or 0) or nil
+	local zoneFilter = { text = state.filter.text, cats = state.filter.cats, newSince = state.filter.newSince }
 	local visible = Query.Filter(all, zoneFilter, resolver)
 	local rows = Query.ZoneTree(visible, resolver, L["Other"])
 	local zoneListed = false
@@ -197,6 +199,18 @@ local function buildFilters(f)
 		end)
 		anchor = check
 	end
+
+	local newOnly = CreateFrame("CheckButton", nil, top, "UICheckButtonTemplate")
+	newOnly:SetSize(24, 24)
+	newOnly:SetPoint("LEFT", anchor, "RIGHT", 70, 0)
+	local newLabel = newOnly:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	newLabel:SetPoint("LEFT", newOnly, "RIGHT", 0, 1)
+	newLabel:SetText(L["New since last login"])
+	newOnly:SetScript("OnClick", function(btn)
+		state.newOnly = btn:GetChecked() and true or nil
+		refresh()
+	end)
+	f.newOnly = newOnly
 
 	f.search = search
 
