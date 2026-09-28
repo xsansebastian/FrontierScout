@@ -76,6 +76,35 @@ describe("Curation over the guild network", function()
 		assert.equals(0, #arch.FS:QueueList())
 	end)
 
+	it("fetches an approved submission whose APPR was lost", function()
+		local net = network()
+		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		local p = mem.FS:SaveEntry(nil, data("Lost chest"))
+		net:Flush()
+		arch.FS:Approve(p.pid)
+		for i = #net.queue, 1, -1 do
+			local item = net.queue[i]
+			if item.client == mem and mem.ns.Comm.Decode(item.text).t == "APPR" then table.remove(net.queue, i) end
+		end
+		net:Flush()
+		assert.equals("approved", mine(mem, p.pid).status)
+		assert.same({}, titles(mem))
+		net:Tick() -- the wait for the APPR runs out: pull from the archivist
+		assert.same({ "Lost chest" }, titles(mem))
+	end)
+
+	it("doesn't pull when the approved entry arrived", function()
+		local net = network()
+		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		local p = mem.FS:SaveEntry(nil, data("Chest"))
+		net:Flush()
+		arch.FS:Approve(p.pid)
+		net:Flush()
+		mem.FS.db.profile.debug = true
+		net:Tick()
+		assert.is_nil(table.concat(mem.state.printed, "\n"):find("never arrived", 1, true))
+	end)
+
 	it("rejects with a reason the author sees, even after being offline", function()
 		local net = network()
 		local arch, mem = net:Client("Arch"), net:Client("Mem")

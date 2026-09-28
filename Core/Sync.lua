@@ -95,6 +95,7 @@ local function startPull(self, archivist)
 		if not sync.gotManifest and waited >= MANIFEST_TIMEOUT then
 			sync.guildFrom[self.syncPartner] = true
 		elseif waited < SESSION_TIMEOUT then
+			self:Debug("not pulling from %s yet: still syncing with %s", archivist, self.syncPartner)
 			return
 		end
 	end
@@ -152,7 +153,11 @@ end)
 FS:OnMessageType("ARCH", function(self, msg, sender)
 	if not self.store or not trusted(self, sender, "ARCH") then return end
 	sync.archivists[sender] = { root = msg.root, count = tonumber(msg.count) or 0, seen = now() }
-	if msg.root ~= digest(self):Root() then startPull(self, sender) end
+	if msg.root ~= digest(self):Root() then
+		startPull(self, sender)
+	else
+		self:Debug("%s has the same data as us", sender)
+	end
 end)
 
 FS:OnMessageType("SYNCREQ", function(self, msg, sender)
@@ -222,7 +227,10 @@ local function applyAll(self, list)
 	local applied, fresh = 0, {}
 	for _, e in ipairs(list) do
 		local existed = type(e) == "table" and self.store:Get(e.id) ~= nil
-		local stored = self.store:Apply(e)
+		local stored, err = self.store:Apply(e)
+		if not stored and err ~= "old" then
+			self:Debug("couldn't store %s: %s", type(e) == "table" and tostring(e.id) or "?", tostring(err))
+		end
 		if stored then
 			applied = applied + 1
 			if not existed and not stored.deleted then fresh[#fresh + 1] = stored end
@@ -309,6 +317,11 @@ function FS:SeenArchivists()
 	end
 	table.sort(list)
 	return list
+end
+
+-- Pulls from `archivist` now (e.g. they approved an entry that never reached us).
+function FS:PullFrom(archivist)
+	if self.store and self:IsArchivist(archivist) then startPull(self, archivist) end
 end
 
 -- Status for /fs status and the browser.
