@@ -185,6 +185,8 @@ L["none seen"] = true
 
 -- Sync
 L["Sync is paused in combat and instances."] = true
+L["Send over the guild channel only"] = true
+L["FrontierScout normally sends over a hidden chat channel for your guild, because on WoW Forever some players' guild addon messages never arrive. Turn this on to send over the guild channel instead (you still receive on both)."] = true
 L["%s has an older FrontierScout that can't exchange data with yours. Ask them to update."] = true
 L["Looking for archivists..."] = true
 

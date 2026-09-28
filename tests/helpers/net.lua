@@ -19,7 +19,9 @@ function Net.new(members, opts)
 	for _, m in ipairs(members) do
 		local state, FS, ns = wow.boot({ guild = "Wardens", player = m.name, rank = m.rank or 2, roster = roster,
 			guildInfo = opts.guildInfo or "[FS1 s=2 eo=2 ea=1 do=2 da=1 r=9 ar=1]", canViewNotes = (m.rank or 2) <= 1,
-			now = opts.now, ui = opts.ui })
+			now = opts.now, ui = opts.ui, channels = opts.channels or m.channels })
+		-- m.guildBroken: this player's guild addon messages never arrive (seen on WoW Forever).
+		state.guildBroken = m.guildBroken
 		state.bus = net
 		FS:OnEnable()
 		local client = { name = m.name .. "-Realm", state = state, FS = FS, ns = ns }
@@ -30,9 +32,17 @@ function Net.new(members, opts)
 end
 
 function Net:Send(fromState, prefix, text, distribution, target)
+	if distribution == "GUILD" and fromState.guildBroken then return end
+	local channelName
+	if distribution == "CHANNEL" then
+		for name, index in pairs(fromState.channels) do
+			if index == target then channelName = name end
+		end
+	end
 	for _, c in ipairs(self.clients) do
 		if c.state ~= fromState then
 			local to = distribution == "GUILD" or (distribution == "WHISPER" and (target == c.name or target .. "-Realm" == c.name))
+				or (channelName ~= nil and c.state.channels[channelName] ~= nil)
 			if to and not c.offline then
 				local sender
 				for _, s in ipairs(self.clients) do if s.state == fromState then sender = s.name end end
