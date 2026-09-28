@@ -19,9 +19,12 @@ local MAX_SERVING = 2
 local ENT_BATCH = 20
 local WANT_CHUNK = 100
 local HELLO_THROTTLE = 30
+local REPLY_TIMEOUT = 20 -- no MANIFEST by then: a new ARCH / HELLO may ask again
 
 local sync = {
 	archivists = {}, -- name -> { root, count, seen }
+	replied = false, -- the current pull's archivist has answered
+	oldClients = {}, -- name -> true: already told the player they need to update
 	serving = {},    -- member name -> last activity (archivist side)
 	lastHello = nil,
 }
@@ -83,14 +86,15 @@ local function finishPull(self, ok)
 	self.syncPartner, sync.partnerAt, sync.wanted = nil, nil, nil
 end
 
--- Starts pulling from `archivist` unless a pull is already running.
+-- Starts pulling from `archivist` unless a pull is already running (one
+-- whose archivist hasn't answered at all is given up after REPLY_TIMEOUT).
 local function startPull(self, archivist)
 	if not self.store or ns.Comm.Paused() then return end
-	if self.syncPartner and now() - sync.partnerAt < SESSION_TIMEOUT then
+	if self.syncPartner and now() - sync.partnerAt < (sync.replied and SESSION_TIMEOUT or REPLY_TIMEOUT) then
 		self:Debug("not pulling from %s yet: still syncing with %s", archivist, self.syncPartner)
 		return
 	end
-	self.syncPartner, sync.partnerAt = archivist, now()
+	self.syncPartner, sync.partnerAt, sync.replied = archivist, now(), false
 	self:Send("SYNCREQ", { b = digest(self):Buckets() }, "WHISPER", archivist, "ALERT")
 end
 
@@ -115,6 +119,7 @@ function FS:SayHello(force)
 		root = d:Root(),
 		count = d.count,
 		role = self:AmArchivist() and "A" or "M",
+		tv = ns.Comm.TRANSPORT,
 		open = self.OpenProposals and self:OpenProposals() or nil,
 	}, "GUILD", nil, "ALERT")
 	return true
@@ -122,13 +127,22 @@ end
 
 local function beacon(self, channel, target)
 	local d = digest(self)
-	self:Send("ARCH", { root = d:Root(), count = d.count }, channel, target, "ALERT")
+	self:Send("ARCH", { root = d:Root(), count = d.count, tv = ns.Comm.TRANSPORT }, channel, target, "ALERT")
+end
+
+-- A client too old to hear addressed messages can't sync with this one: say so once.
+local function checkTransport(self, msg, sender)
+	if (tonumber(msg.tv) or 1) >= ns.Comm.TRANSPORT or sync.oldClients[sender] then return end
+	sync.oldClients[sender] = true
+	self:Print(L["%s has an older FrontierScout that can't exchange data with yours. Ask them to update."]:format(
+		Ambiguate(sender, "guild")))
 end
 
 -- Handlers ---------------------------------------------------------------------------
 
 FS:OnMessageType("HELLO", function(self, msg, sender)
 	if not self.store then return end
+	checkTransport(self, msg, sender)
 	if not self:AmArchivist() then
 		self:Debug("not answering HELLO from %s: not an archivist here (%s)", sender, self:ArchivistStatus())
 		return
@@ -143,6 +157,7 @@ end)
 
 FS:OnMessageType("ARCH", function(self, msg, sender)
 	if not self.store or not trusted(self, sender, "ARCH") then return end
+	checkTransport(self, msg, sender)
 	sync.archivists[sender] = { root = msg.root, count = tonumber(msg.count) or 0, seen = now() }
 	if msg.root ~= digest(self):Root() then
 		startPull(self, sender)
@@ -152,7 +167,11 @@ FS:OnMessageType("ARCH", function(self, msg, sender)
 end)
 
 FS:OnMessageType("SYNCREQ", function(self, msg, sender)
-	if not self.store or not self:AmArchivist() or type(msg.b) ~= "table" then return end
+	if not self.store or type(msg.b) ~= "table" then return end
+	if not self:AmArchivist() then
+		self:Debug("not serving SYNCREQ from %s: not an archivist here (%s)", sender, self:ArchivistStatus())
+		return
+	end
 	for name, t in pairs(sync.serving) do
 		if now() - t > SESSION_TIMEOUT then sync.serving[name] = nil end
 	end
@@ -170,6 +189,7 @@ end)
 FS:OnMessageType("MANIFEST", function(self, msg, sender)
 	if not self.store or sender ~= self.syncPartner or type(msg.m) ~= "table" then return end
 	if not trusted(self, sender, "MANIFEST") then return end
+	sync.replied = true
 	local stale = self.store:Stale(msg.m, GetServerTime())
 	for _, id in ipairs(stale) do self.store:Forget(id) end
 	if #stale > 0 then self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED") end
@@ -272,7 +292,8 @@ local function reset()
 	wipe(warned)
 	wipe(sync.archivists)
 	wipe(sync.serving)
-	sync.lastHello = nil
+	wipe(sync.oldClients)
+	sync.lastHello, sync.replied = nil, false
 	FS.syncPartner, sync.partnerAt, sync.wanted = nil, nil, nil
 end
 

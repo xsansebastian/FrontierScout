@@ -185,6 +185,7 @@ L["none seen"] = true
 
 -- Sync
 L["Sync is paused in combat and instances."] = true
+L["%s has an older FrontierScout that can't exchange data with yours. Ask them to update."] = true
 L["Looking for archivists..."] = true
 
 -- Review

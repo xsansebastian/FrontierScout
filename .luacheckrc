@@ -10,6 +10,7 @@ read_globals = {
 	"bit",
 	"ButtonFrameTemplate_HidePortrait",
 	"C_AddOns",
+	"C_ChatInfo",
 	"C_Club",
 	"C_GuildInfo",
 	"C_Item",

@@ -158,6 +158,54 @@ describe("Sync", function()
 		assert.equals(root(arch), root(mem))
 	end)
 
+	it("asks again when the archivist never answered the pull", function()
+		local net = network()
+		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		arch.state.bus = nil
+		for i = 1, 3 do arch.FS:SaveEntry(nil, data("E" .. i)) end
+		arch.state.bus = net
+		-- The first MANIFEST is lost (e.g. the archivist's client is outdated).
+		local send, lost = net.Send, false
+		function net.Send(self, fromState, prefix, text, distribution, target)
+			if not lost and fromState == arch.state and prefix == arch.ns.Comm.PREFIX_TO then
+				local msg = wow.decode(arch.ns, { prefix = prefix, text = text })
+				if msg.t == "MANIFEST" then lost = true return end
+			end
+			return send(self, fromState, prefix, text, distribution, target)
+		end
+		net:Tick()
+		assert.is_true(lost)
+		assert.same({}, titles(mem))
+		mem.FS:SayHello(true) -- too soon: the pull is still waiting for an answer
+		net:Flush()
+		assert.same({}, titles(mem))
+		mem.state.time = 1000 + 25
+		mem.FS:SayHello(true)
+		net:Flush()
+		assert.equals(3, #mem.FS.store:All())
+	end)
+
+	it("tells the player once when a guildmate's client is too old to sync with", function()
+		local net = network()
+		local mem = net:Client("Mem")
+		local Comm = mem.ns.Comm
+		local hello = Comm.Encode({ v = 1, g = mem.FS.guildKey, t = "HELLO", role = "M", root = "x", count = 0 })
+		mem.FS:OnCommReceived(Comm.PREFIX, hello, "GUILD", "Arch")
+		mem.FS:OnCommReceived(Comm.PREFIX, hello, "GUILD", "Arch")
+		local warnings = 0
+		for _, line in ipairs(mem.state.printed) do
+			if line:find("Arch has an older FrontierScout", 1, true) then warnings = warnings + 1 end
+		end
+		assert.equals(1, warnings)
+		for _, c in ipairs(net.clients) do c.state.printed = {} end
+		net:Tick() -- current clients announce themselves without a warning
+		for _, c in ipairs(net.clients) do
+			for _, line in ipairs(c.state.printed) do
+				assert.is_nil(line:find("older FrontierScout", 1, true), line)
+			end
+		end
+	end)
+
 	it("/fs sync says hello again", function()
 		local net = network()
 		local mem = net:Client("Mem")
