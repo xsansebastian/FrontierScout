@@ -1,0 +1,11 @@
+package-as: FrontierScout
+
+# Libraries are vendored in Libs/ (see scripts/update-libs.sh), so no externals.
+
+ignore:
+  - .github
+  - .busted
+  - .luacheckrc
+  - docs
+  - scripts
+  - tests

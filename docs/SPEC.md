@@ -38,7 +38,7 @@ telling guildmates about. Discoveries are:
 
 | Topic | Decision |
 |---|---|
-| Client | WoW Forever, Mainline 12.x API. `## Interface:` number to be confirmed in beta via `/dump select(4, GetBuildInfo())`. |
+| Client | WoW Forever, Mainline 12.x API (`WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`). Beta interface **16001**; the TOC also lists current Retail interfaces so the addon can be tested on Retail. |
 | Lua | 5.1 (WoW flavour), `bit` library available. |
 | Maps | `C_Map` (uiMapID-based). Positions stored as uiMapID + normalized x/y. |
 | Comms | `C_ChatInfo.SendAddonMessage` via AceComm, channels `GUILD` and `WHISPER` only. |
@@ -56,8 +56,11 @@ telling guildmates about. Discoveries are:
 | AceSerializer-3.0 | Table serialization |
 | LibDeflate | Compression + addon-channel-safe encoding |
 | HereBeDragons-2.0, HereBeDragons-Pins-2.0 | World map and minimap pins, coordinate translation |
-| LibDataBroker-1.1, LibDBIcon-1.0 | Minimap / broker launcher |
+| LibDataBroker-1.1, LibDBIcon-1.0 | Minimap / broker launcher. *Not vendored yet: decide in M1 between these and the native Addon Compartment.* |
 | AceConfig-3.0, AceConfigDialog-3.0, AceGUI-3.0 | Options panel only |
+
+Libraries are **vendored** in `Libs/` from pinned upstream revisions by `scripts/update-libs.sh`
+(see `Libs/README.md`), so the repository folder can be dropped into `Interface/AddOns` as-is.
 
 The browser window and map side panel use native frames (`ScrollBox` + `DataProvider`) for
 performance.
@@ -83,19 +86,23 @@ isn't, use the fallback only.
 `FrontierScoutDB` (account-wide SavedVariables) is structured as:
 
 ```lua
+-- AceDB layout: addon data under .global, UI settings under .profiles
 FrontierScoutDB = {
-  schema = 1,
-  guilds = {
-    [guildKey] = {
-      meta      = { name = "Guild Name", realm = "Realm", lastSeen = <time> },
-      entries   = { [entryId] = Entry, ... },       -- approved canonical set (+ tombstones)
-      outbox    = { [proposalId] = Proposal, ... }, -- my submissions not yet acknowledged
-      mine      = { [proposalId] = ProposalStatus }, -- history of my submissions & decisions
-      queue     = { [proposalId] = Proposal, ... }, -- archivists only: pending review
-      syncState = { lastFullSync = <time>, digest = {...} },
+  global = {
+    schema    = 1,
+    sessions  = <n>, firstSeen = <time>,               -- shown by /fs status
+    guilds = {
+      [guildKey] = {
+        meta      = { name = "Guild Name", realm = "Realm", lastSeen = <time> },
+        entries   = { [entryId] = Entry, ... },        -- approved canonical set (+ tombstones)
+        outbox    = { [proposalId] = Proposal, ... },  -- my submissions not yet acknowledged
+        mine      = { [proposalId] = ProposalStatus }, -- history of my submissions & decisions
+        queue     = { [proposalId] = Proposal, ... },  -- archivists only: pending review
+        syncState = { lastFullSync = <time>, digest = {...} },
+      },
     },
   },
-  profile = { ... UI settings (AceDB profile) ... },
+  profiles = { ... UI settings (AceDB profiles) ... },
 }
 ```
 
@@ -504,7 +511,7 @@ trust anchors cover the realistic threats.
 FrontierScout/
   FrontierScout.toc
   embeds.xml
-  Libs/                      -- embedded libraries (§2.1), via .pkgmeta externals
+  Libs/                      -- vendored libraries (§2.1), see Libs/README.md
   Locales/enUS.lua           -- AceLocale-ready (esES etc. later)
   Core/
     Init.lua                 -- AceAddon, DB defaults, slash commands
@@ -526,7 +533,8 @@ FrontierScout/
     ReviewTab.lua
     Tooltip.lua
     Options.lua              -- AceConfig, Guild Setup
-  .pkgmeta                   -- BigWigs packager, lib externals
+  .pkgmeta                   -- BigWigs packager
+  scripts/update-libs.sh     -- re-vendors Libs/ from pinned revisions
   .luacheckrc
   tests/                     -- busted specs for pure-Lua modules (ACL, Digest, Store, Sync state machine)
 ```
@@ -552,8 +560,9 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
 
 ## 12. Open questions / to verify in beta
 
-1. The exact `## Interface:` value for Forever, and whether Forever uses a separate TOC suffix
-   (e.g. `_Forever.toc`).
+1. ~~The exact `## Interface:` value~~: **16001** on the beta (may change at launch). Whether
+   Forever needs a separate TOC suffix: other authors ship a `_Camelot.toc`, but a plain `.toc`
+   with 16001 loads.
 2. Whether `C_Club.GetGuildClubId()` is available and stable.
 3. The exact addon comms restrictions under Midnight rules on Forever: which contexts block
    `SendAddonMessage`, and what the throttle budgets are.
