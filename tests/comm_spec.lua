@@ -88,6 +88,29 @@ describe("Comm isolation", function()
 		assert.same({ { 1, "Friend-Realm", "GUILD" } }, got)
 	end)
 
+	it("says in debug when the game refuses to send", function()
+		local state, FS = boot()
+		FS.db.profile.debug = true
+		state.sendResult = 9
+		FS:Send("TEST", {}, "GUILD")
+		assert.matches("the game didn't send TEST (result 9)", table.concat(state.printed, "\n"), 1, true)
+		state.printed, state.sendResult = {}, nil
+		FS:Send("TEST", {}, "GUILD")
+		assert.is_nil(table.concat(state.printed, "\n"):find("didn't send", 1, true))
+	end)
+
+	it("/fs whoami reports whether this client can send to the guild", function()
+		local state = boot()
+		state.env.UnitName = function() return "Scout" end
+		wow.slash(state, "whoami")
+		assert.matches("Sending: can speak in guild chat: true | in combat: false | in instance: false | test message: sent",
+			table.concat(state.printed, "\n"), 1, true)
+		state.printed, state.sendResult, state.canSpeak = {}, 9, false
+		wow.slash(state, "whoami")
+		assert.matches("can speak in guild chat: false | in combat: false | in instance: false | test message: refused (GeneralError)",
+			table.concat(state.printed, "\n"), 1, true)
+	end)
+
 	it("drops floods from one sender", function()
 		local _, FS, Comm, got = boot()
 		for i = 1, 40 do deliver(FS, Comm, { v = 1, g = FS.guildKey, t = "TEST", x = i }, "GUILD", "Friend") end

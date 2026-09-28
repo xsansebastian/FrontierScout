@@ -104,13 +104,41 @@ function FS:Send(t, payload, channel, target, prio)
 	else
 		self:Debug("sending %s to the guild", t)
 	end
-	local item = { prefix, text, "GUILD", nil, prio or "NORMAL" }
+	local item = { prefix, text, "GUILD", nil, prio or "NORMAL", t }
 	if Comm.Paused() then
+		self:Debug("holding %s until combat or the instance ends", t)
 		if #queue < Comm.MAX_QUEUE then queue[#queue + 1] = item end
 		return false
 	end
-	self:SendCommMessage(item[1], item[2], item[3], item[4], item[5])
+	self:SendItem(item)
 	return true
+end
+
+-- The game can refuse an addon message (e.g. a guild rank that may not talk
+-- in guild chat); ChatThrottleLib then drops it silently, so say so in debug.
+-- AceComm calls back per chunk with (arg, sent, total, result), where result
+-- is a success boolean or a Enum.SendAddonMessageResult code.
+local function sentCallback(t, _, _, result)
+	if result == false or (type(result) == "number" and result ~= 0) then
+		FS:Debug("the game didn't send %s (result %s)", tostring(t), tostring(result))
+	end
+end
+
+function FS:SendItem(item)
+	self:SendCommMessage(item[1], item[2], item[3], item[4], item[5], sentCallback, item[6])
+end
+
+-- Sends one test message straight through the game (bypassing the queue) and
+-- returns what the game answered; for /fs whoami.
+function Comm.Probe()
+	if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) or not IsInGuild() then return "not available" end
+	local ok, result = pcall(C_ChatInfo.SendAddonMessage, "FScoutPing", "ping", "GUILD")
+	if not ok then return "error: " .. tostring(result) end
+	if result == nil or result == true or result == 0 then return "sent" end
+	for key, value in pairs(Enum and Enum.SendAddonMessageResult or {}) do
+		if value == result then return ("refused (%s)"):format(key) end
+	end
+	return ("refused (%s)"):format(tostring(result))
 end
 
 function FS:FlushQueue()
@@ -118,7 +146,7 @@ function FS:FlushQueue()
 	local pending = queue
 	queue = {}
 	for _, item in ipairs(pending) do
-		self:SendCommMessage(item[1], item[2], item[3], item[4], item[5])
+		self:SendItem(item)
 	end
 	self:SendMessage("FRONTIERSCOUT_SYNC_RESUMED")
 end

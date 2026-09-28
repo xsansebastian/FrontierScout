@@ -66,8 +66,14 @@ local function newAceAddon(state)
 			function addon:RegisterComm(prefix, method)
 				state.commPrefix, state.commMethod = prefix, method or "OnCommReceived"
 			end
-			function addon:SendCommMessage(prefix, text, distribution, target, prio)
+			-- state.sendResult (e.g. 9, GeneralError) makes the game refuse every message.
+			function addon:SendCommMessage(prefix, text, distribution, target, prio, callbackFn, callbackArg)
+				if state.sendResult then
+					if callbackFn then callbackFn(callbackArg, #text, #text, state.sendResult) end
+					return
+				end
 				state.sent[#state.sent + 1] = { prefix = prefix, text = text, distribution = distribution, target = target, prio = prio }
+				if callbackFn then callbackFn(callbackArg, #text, #text, true) end
 				if state.bus then state.bus:Send(state, prefix, text, distribution, target) end
 			end
 			-- AceEvent subset: records registrations, delivers messages.
@@ -163,7 +169,16 @@ function M.new(opts)
 	env.C_GuildInfo = {
 		GuildRoster = function() state.rosterRequests = (state.rosterRequests or 0) + 1 end,
 		CanViewOfficerNote = function() return state.canViewNotes end,
+		CanSpeakInGuildChat = function() return state.canSpeak ~= false end,
 	}
+	env.C_ChatInfo = {
+		SendAddonMessage = function(prefix, text, distribution)
+			state.probes = (state.probes or 0) + 1
+			return state.sendResult or 0, prefix, text, distribution
+		end,
+	}
+	env.Enum = { SendAddonMessageResult = { Success = 0, AddonMessageThrottle = 3, NotInGroup = 5, ChannelThrottle = 8,
+		GeneralError = 9 } }
 	env.GetNumGuildMembers = function() return #state.roster end
 	env.GetGuildRosterInfo = function(i)
 		local m = state.roster[i]

@@ -181,6 +181,10 @@ function commands.whoami(self)
 	self:Print(("Archivists seen on the network: %s | send submissions to: %s"):format(
 		#seen > 0 and table.concat(seen, ", ") or "none",
 		self.OnlineArchivists and table.concat(self:OnlineArchivists(), ", ") or "?"))
+	local canSpeak = C_GuildInfo and C_GuildInfo.CanSpeakInGuildChat and C_GuildInfo.CanSpeakInGuildChat()
+	self:Print(("Sending: can speak in guild chat: %s | in combat: %s | in instance: %s | test message: %s"):format(
+		tostring(canSpeak), tostring(InCombatLockdown() and true or false), tostring(IsInInstance() and true or false),
+		ns.Comm.Probe()))
 end
 
 function commands.sync(self)
