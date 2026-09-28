@@ -111,6 +111,24 @@ describe("Comm isolation", function()
 			table.concat(state.printed, "\n"), 1, true)
 	end)
 
+	it("shows whether its prefixes are registered, and logs raw deliveries in debug", function()
+		local state, FS = boot()
+		state.env.UnitName = function() return "Scout" end
+		state.unregistered = { FScoutTo = true }
+		wow.slash(state, "whoami")
+		assert.matches("Receiving: prefixes registered: FScout yes, FScoutTo NO", table.concat(state.printed, "\n"), 1, true)
+		FS.db.profile.debug = true
+		wow.fire(state, "CHAT_MSG_ADDON", "FScout", "x", "GUILD", "Friend")
+		wow.fire(state, "CHAT_MSG_ADDON", "FScout", "y", "GUILD", "Friend") -- within 10 s: once
+		wow.fire(state, "CHAT_MSG_ADDON", "Other", "z", "GUILD", "Friend")
+		local n = 0
+		for _, line in ipairs(state.printed) do
+			if line:find("the game delivered", 1, true) then n = n + 1 end
+		end
+		assert.equals(1, n)
+		assert.matches("the game delivered a FScout message from Friend via GUILD", table.concat(state.printed, "\n"), 1, true)
+	end)
+
 	it("drops floods from one sender", function()
 		local _, FS, Comm, got = boot()
 		for i = 1, 40 do deliver(FS, Comm, { v = 1, g = FS.guildKey, t = "TEST", x = i }, "GUILD", "Friend") end

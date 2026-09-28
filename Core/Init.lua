@@ -186,6 +186,7 @@ function commands.whoami(self)
 	self:Print(("Sending: can speak in guild chat: %s | in combat: %s | in instance: %s | test message: %s"):format(
 		tostring(canSpeak), tostring(InCombatLockdown() and true or false), tostring(IsInInstance() and true or false),
 		ns.Comm.Probe()))
+	self:Print(("Receiving: prefixes registered: %s"):format(ns.Comm.PrefixStatus()))
 	local heard = {}
 	for sender, how in pairs(self.heardOn or {}) do heard[#heard + 1] = ("%s via %s"):format(sender, how) end
 	table.sort(heard)

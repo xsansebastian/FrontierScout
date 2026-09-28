@@ -100,10 +100,9 @@ function FS:Send(t, payload, channel, target, prio)
 	local prefix, text = Comm.PREFIX, Comm.Encode(payload)
 	if channel == "WHISPER" then
 		prefix, text = Comm.PREFIX_TO, Comm.Address(target, text)
-		self:Debug("sending %s to %s", t, target)
-	else
-		self:Debug("sending %s to the guild", t)
 	end
+	self:Debug("sending %s%s via %s", t, target and (" to " .. target) or "",
+		self:CommChannel() and ("channel " .. self:CommChannel()) or "the guild channel")
 	local item = { prefix, text, "GUILD", nil, prio or "NORMAL", t }
 	if Comm.Paused() then
 		self:Debug("holding %s until combat or the instance ends", t)
@@ -266,9 +265,35 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 	self.heardOn[sender] = distribution
 end
 
+-- Are our prefixes registered with the game? A client has a limit on addon
+-- message prefixes (all addons together); an unregistered prefix is never
+-- delivered, with no error. For /fs whoami.
+function Comm.PrefixStatus()
+	local check = C_ChatInfo and C_ChatInfo.IsAddonMessagePrefixRegistered
+	if not check then return "unknown" end
+	local parts = {}
+	for _, prefix in ipairs({ Comm.PREFIX, Comm.PREFIX_TO }) do
+		parts[#parts + 1] = ("%s %s"):format(prefix, check(prefix) and "yes" or "NO")
+	end
+	return table.concat(parts, ", ")
+end
+
+-- Debug: every addon message on our prefixes as the game delivers it, before
+-- AceComm or any filtering (once per sender and prefix every 10 seconds).
+local rawSeen = {}
+local function rawAddonMessage(prefix, _, distribution, sender)
+	if (prefix ~= Comm.PREFIX and prefix ~= Comm.PREFIX_TO) or not (FS.db and FS.db.profile.debug) then return end
+	local key = tostring(sender) .. prefix
+	if rawSeen[key] and GetTime() - rawSeen[key] < 10 then return end
+	rawSeen[key] = GetTime()
+	FS:Debug("the game delivered a %s message from %s via %s", prefix, tostring(sender), tostring(distribution))
+end
+
 FS:OnEnableHook(function()
 	FS:RegisterComm(Comm.PREFIX)
 	FS:RegisterComm(Comm.PREFIX_TO)
+	FS:Debug("addon message prefixes registered: %s", Comm.PrefixStatus())
+	FS:ListenEvent("CHAT_MSG_ADDON", rawAddonMessage)
 	FS:ListenEvent("PLAYER_REGEN_ENABLED", function() FS:FlushQueue() end)
 	FS:ListenEvent("ZONE_CHANGED_NEW_AREA", function() FS:FlushQueue() end)
 end)
