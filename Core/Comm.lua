@@ -65,7 +65,13 @@ local whisperFailed = {}  -- full name -> true: send to them over GUILD instead
 -- Small messages for one player that go over the guild channel (addressed
 -- with `to`) instead of a whisper: whispering WoW Forever's "Name Surname"
 -- names isn't reliable, and these must arrive.
-Comm.VIA_GUILD = { PROP = true, PACK = true, QMISS = true, QDEC = true }
+Comm.VIA_GUILD = { PROP = true, PACK = true, QMISS = true, QDEC = true, ARCH = true, SYNCREQ = true, WANT = true, BUSY = true }
+
+-- Sends everything for `name` over the guild channel (a member whose
+-- downloads over whispers never arrived asks for this).
+function FS:PreferGuild(name)
+	whisperFailed[name] = true
+end
 
 -- A whisper from us that the game couldn't deliver prints "No player named
 -- '...' is currently playing." Hide it (the user didn't whisper anyone) and
@@ -103,6 +109,7 @@ function FS:Send(t, payload, channel, target, prio)
 		target = Guild.WhisperName(target, GetNormalizedRealmName())
 		recentWhispers[target] = GetTime()
 	end
+	self:Debug("sending %s via %s%s", t, channel, payload.to and (" to " .. payload.to) or (target and (" to " .. target) or ""))
 	local item = { Comm.Encode(payload), channel, target, prio or "NORMAL" }
 	if Comm.Paused() then
 		if #queue < Comm.MAX_QUEUE then queue[#queue + 1] = item end
@@ -145,7 +152,7 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 		return
 	end
 	-- Guild messages addressed to someone else.
-	if msg.to ~= nil and msg.to ~= self:PlayerName() then return end
+	if msg.to ~= nil and not self:IsMe(msg.to) then return end
 	self:Debug("received %s from %s", tostring(msg.t), sender)
 	for _, handler in ipairs(handlers[msg.t] or {}) do
 		handler(self, msg, sender, distribution)

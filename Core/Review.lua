@@ -104,22 +104,20 @@ function FS:OnlineArchivists()
 	return list
 end
 
--- Sends waiting proposals to every online archivist (each at most once a
--- minute). Queued ones (acked by an archivist) only go again with `force`.
+-- Broadcasts waiting proposals on the guild channel (each at most once a
+-- minute); every archivist that hears one queues it, everyone else ignores
+-- it. This doesn't depend on knowing who the archivists are. Queued ones
+-- (acked by an archivist) only go again with `force`.
 function FS:FlushOutbox(force)
 	if not self.store then return 0 end
 	self:AdoptOwnOutbox()
-	local archivists = self:OnlineArchivists()
-	if #archivists == 0 then return 0 end
 	local sent = 0
 	local b = lists(self)
 	for pid, p in pairs(b.outbox) do
 		local queued = b.mine[pid] and b.mine[pid].status == "queued"
 		if force or (not queued and (not sentAt[pid] or GetTime() - sentAt[pid] >= Review.RESEND_INTERVAL)) then
 			sentAt[pid] = GetTime()
-			for _, archivist in ipairs(archivists) do
-				self:Send("PROP", { p = p }, "WHISPER", archivist, "NORMAL")
-			end
+			self:Send("PROP", { p = p }, "GUILD", nil, "NORMAL")
 			sent = sent + 1
 		end
 	end

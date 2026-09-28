@@ -18,9 +18,12 @@ local MAX_SERVING = 2
 local ENT_BATCH = 20
 local WANT_CHUNK = 100
 local HELLO_THROTTLE = 30
+local MANIFEST_TIMEOUT = 30 -- no manifest by then: ask for the guild channel next time
 
 local sync = {
 	archivists = {}, -- name -> { root, count, seen }
+	guildFrom = {},  -- archivist -> true: their whispers don't reach us
+	gotManifest = false,
 	serving = {},    -- member name -> last activity (archivist side)
 	lastHello = nil,
 }
@@ -79,12 +82,21 @@ local function finishPull(self, ok)
 	self.syncPartner, sync.partnerAt, sync.wanted = nil, nil, nil
 end
 
--- Starts pulling from `archivist` unless a pull is already running.
+-- Starts pulling from `archivist` unless a pull is already running. A pull
+-- whose manifest never came (the archivist's whispers don't reach us) is
+-- retried asking for everything over the guild channel (`gc`).
 local function startPull(self, archivist)
 	if not self.store or ns.Comm.Paused() then return end
-	if self.syncPartner and now() - sync.partnerAt < SESSION_TIMEOUT then return end
-	self.syncPartner, sync.partnerAt = archivist, now()
-	self:Send("SYNCREQ", { b = digest(self):Buckets() }, "WHISPER", archivist, "ALERT")
+	if self.syncPartner then
+		local waited = now() - sync.partnerAt
+		if not sync.gotManifest and waited >= MANIFEST_TIMEOUT then
+			sync.guildFrom[self.syncPartner] = true
+		elseif waited < SESSION_TIMEOUT then
+			return
+		end
+	end
+	self.syncPartner, sync.partnerAt, sync.gotManifest = archivist, now(), false
+	self:Send("SYNCREQ", { b = digest(self):Buckets(), gc = sync.guildFrom[archivist] or nil }, "WHISPER", archivist, "ALERT")
 end
 
 -- An online archivist whose root differs from ours, other than `except`.
@@ -138,6 +150,7 @@ end)
 
 FS:OnMessageType("SYNCREQ", function(self, msg, sender)
 	if not self.store or not self:AmArchivist() or type(msg.b) ~= "table" then return end
+	if msg.gc then self:PreferGuild(sender) end
 	for name, t in pairs(sync.serving) do
 		if now() - t > SESSION_TIMEOUT then sync.serving[name] = nil end
 	end
@@ -155,6 +168,7 @@ end)
 FS:OnMessageType("MANIFEST", function(self, msg, sender)
 	if not self.store or sender ~= self.syncPartner or type(msg.m) ~= "table" then return end
 	if not trusted(self, sender, "MANIFEST") then return end
+	sync.gotManifest = true
 	local stale = self.store:Stale(msg.m, GetServerTime())
 	for _, id in ipairs(stale) do self.store:Forget(id) end
 	if #stale > 0 then self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED") end
@@ -254,7 +268,8 @@ local function reset()
 	wipe(warned)
 	wipe(sync.archivists)
 	wipe(sync.serving)
-	sync.lastHello = nil
+	wipe(sync.guildFrom)
+	sync.lastHello, sync.gotManifest = nil, false
 	FS.syncPartner, sync.partnerAt, sync.wanted = nil, nil, nil
 end
 

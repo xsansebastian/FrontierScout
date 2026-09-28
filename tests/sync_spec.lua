@@ -1,4 +1,5 @@
 local Net = require("tests.helpers.net")
+local wow = require("tests.helpers.wow")
 
 -- M4 exit criterion: clients converge from empty and after divergent edits.
 
@@ -81,11 +82,12 @@ describe("Sync", function()
 		arch.state.bus = net
 		net:Tick()
 		assert.equals(250, #net:Client("Mem").FS.store:All())
+		local mem = net:Client("Mem")
 		local wants = 0
-		for _, s in ipairs(net:Client("Mem").state.sent) do
-			if s.distribution == "WHISPER" then wants = wants + 1 end
+		for _, s in ipairs(mem.state.sent) do
+			if mem.ns.Comm.Decode(s.text).t == "WANT" then wants = wants + 1 end
 		end
-		assert.is_true(wants >= 4) -- SYNCREQ + 3 WANT chunks
+		assert.equals(3, wants) -- 250 ids in chunks of 100
 	end)
 
 	it("ignores canonical data from non-archivists", function()
@@ -130,9 +132,14 @@ describe("Sync", function()
 		for _, item in ipairs(queued) do
 			item.client.FS[item.client.state.commMethod](item.client.FS, item.prefix, item.text, item.distribution, item.sender)
 		end
+		-- BUSY goes over the guild channel, addressed to one member.
+		local busyFor = {}
 		for _, item in ipairs(net.queue) do
 			local msg = item.client.ns.Comm.Decode(item.text)
-			if msg.t == "BUSY" then busy = busy + 1 end
+			if msg.t == "BUSY" and not busyFor[msg.to] then
+				busyFor[msg.to] = true
+				busy = busy + 1
+			end
 		end
 		assert.equals(1, busy)
 	end)
@@ -156,5 +163,49 @@ describe("Sync", function()
 		local mem = net:Client("Mem")
 		mem.FS:OnSlashCommand("sync")
 		assert.matches("Looking for archivists", mem.state.printed[#mem.state.printed], 1, true)
+	end)
+end)
+
+describe("Delivery without working whispers", function()
+	-- Every whisper is lost; only the guild channel works.
+	local function noWhispers(net)
+		local send = net.Send
+		function net.Send(self, fromState, prefix, text, distribution, target)
+			if distribution == "WHISPER" then return end
+			return send(self, fromState, prefix, text, distribution, target)
+		end
+	end
+
+	it("a submission reaches the archivist even when the member knows no archivist", function()
+		local net = Net.new({ { name = "Arch", rank = 1, archivist = true }, { name = "Gm", rank = 0 } },
+			{ guildInfo = "[FS1 s=9 eo=9 ea=1 do=9 da=1 r=2 ar=1]" })
+		noWhispers(net)
+		local arch, gm = net:Client("Arch"), net:Client("Gm")
+		gm.state.roster[1].online = false -- the GM's client thinks no archivist is online
+		wow.fire(gm.state, "GUILD_ROSTER_UPDATE")
+		assert.same({}, gm.FS:OnlineArchivists())
+		local p = gm.FS:SaveEntry(nil, data("From the GM"))
+		assert.is_not_nil(p.pid) -- the GM isn't an archivist (no {FS:A}): a proposal
+		net:Flush()
+		assert.equals(1, #arch.FS:QueueList())
+		arch.FS:Approve(p.pid)
+		net:Flush()
+		assert.same({ "From the GM" }, titles(gm))
+		assert.equals("approved", gm.FS.store.bucket.mine[p.pid].status)
+	end)
+
+	it("a member's download switches to the guild channel when whispers never arrive", function()
+		local net = network()
+		noWhispers(net)
+		local arch, mem = net:Client("Arch"), net:Client("Mem")
+		arch.state.bus = nil
+		for i = 1, 5 do arch.FS:SaveEntry(nil, data("E" .. i)) end
+		arch.state.bus = net
+		net:Tick() -- HELLO, ARCH (guild), SYNCREQ (guild), MANIFEST (whisper: lost)
+		assert.same({}, titles(mem))
+		mem.state.time = 2000 -- the manifest never came
+		mem.FS:SayHello(true) -- next ARCH starts a new pull, asking for the guild channel
+		net:Flush()
+		assert.equals(5, #mem.FS.store:All())
 	end)
 end)

@@ -85,6 +85,19 @@ function FS:PlayerName()
 	return name .. "-" .. (realm or GetNormalizedRealmName())
 end
 
+-- Is `name` the player? Accepts the roster name, the UnitFullName form, and
+-- either without the realm (names can reach us in any of these forms).
+function FS:IsMe(name)
+	if type(name) ~= "string" then return false end
+	local realm = GetNormalizedRealmName()
+	local short = Guild.WhisperName(name, realm)
+	local unitName, unitRealm = UnitFullName("player")
+	for _, mine in ipairs({ self:PlayerName(), unitName and (unitName .. "-" .. (unitRealm or realm)) }) do
+		if name == mine or short == Guild.WhisperName(mine, realm) then return true end
+	end
+	return false
+end
+
 -- The player's guild rank index (0 = Guild Master), or nil without a guild.
 function FS:MyRank()
 	if not IsInGuild() then return nil end

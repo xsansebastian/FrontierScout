@@ -88,8 +88,8 @@ table.insert(ns.BrowserPages, {
 		twoPane(frame, mineRow)
 		frame.empty:SetText(L["Nothing submitted yet."])
 		frame.resend = Widgets.Button(frame, L["Send again"], 110, function()
-			local n = FS:FlushOutbox(true)
-			if n == 0 and #FS:OnlineArchivists() == 0 then FS:Print(L["No archivist is online. Submissions are sent when one is."]) end
+			FS:FlushOutbox(true)
+			if #FS:OnlineArchivists() == 0 then FS:Print(L["No archivist is online. Submissions are sent when one is."]) end
 		end)
 		frame.resend:SetPoint("BOTTOMLEFT", 6, 6)
 		frame.clear = Widgets.Button(frame, L["Clear finished"], 110, function() FS:ClearFinished() end)
