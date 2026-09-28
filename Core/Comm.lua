@@ -100,10 +100,9 @@ function FS:Send(t, payload, channel, target, prio)
 	local prefix, text = Comm.PREFIX, Comm.Encode(payload)
 	if channel == "WHISPER" then
 		prefix, text = Comm.PREFIX_TO, Comm.Address(target, text)
-		self:Debug("sending %s to %s", t, target)
-	else
-		self:Debug("sending %s to the guild", t)
 	end
+	self:Debug("sending %s%s via %s", t, target and (" to " .. target) or "",
+		self:CommChannel() and ("channel " .. self:CommChannel()) or "the guild channel")
 	local item = { prefix, text, "GUILD", nil, prio or "NORMAL", t }
 	if Comm.Paused() then
 		self:Debug("holding %s until combat or the instance ends", t)
@@ -118,9 +117,17 @@ end
 -- silently, so say so in debug, and resend a refused channel message once over
 -- the guild channel. AceComm calls back per chunk with (arg, sent, total,
 -- result), where result is a success boolean or a Enum.SendAddonMessageResult code.
+local lastProbe = -math.huge
 local function sentCallback(item, _, _, result)
 	if result == false or (type(result) == "number" and result ~= 0) then
 		FS:Debug("the game didn't send %s over %s (result %s)", tostring(item[6]), tostring(item.via), tostring(result))
+		-- AceComm only reports success or not: ask the game directly why (once a minute).
+		if GetTime() - lastProbe >= 60 then
+			lastProbe = GetTime()
+			local channel = item.via == "CHANNEL" and FS:CommChannel()
+			FS:Debug("direct test over %s: %s", tostring(item.via),
+				Comm.Probe(channel and "CHANNEL" or "GUILD", channel or nil))
+		end
 		if item.via == "CHANNEL" and not item.retried then
 			item.retried, item.via = true, "GUILD"
 			FS:SendCommMessage(item[1], item[2], item[3], item[4], item[5], sentCallback, item)
@@ -197,11 +204,11 @@ function FS:SendItem(item)
 	end
 end
 
--- Sends one test message straight through the game (bypassing the queue) and
--- returns what the game answered; for /fs whoami.
-function Comm.Probe()
+-- Sends one test message straight through the game (bypassing the queue) on
+-- GUILD, or on `distribution` / `target`, and returns what the game answered.
+function Comm.Probe(distribution, target)
 	if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) or not IsInGuild() then return "not available" end
-	local ok, result = pcall(C_ChatInfo.SendAddonMessage, "FScoutPing", "ping", "GUILD")
+	local ok, result = pcall(C_ChatInfo.SendAddonMessage, "FScoutPing", "ping", distribution or "GUILD", target)
 	if not ok then return "error: " .. tostring(result) end
 	if result == nil or result == true or result == 0 then return "sent" end
 	for key, value in pairs(Enum and Enum.SendAddonMessageResult or {}) do
@@ -266,9 +273,35 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 	self.heardOn[sender] = distribution
 end
 
+-- Are our prefixes registered with the game? A client has a limit on addon
+-- message prefixes (all addons together); an unregistered prefix is never
+-- delivered, with no error. For /fs whoami.
+function Comm.PrefixStatus()
+	local check = C_ChatInfo and C_ChatInfo.IsAddonMessagePrefixRegistered
+	if not check then return "unknown" end
+	local parts = {}
+	for _, prefix in ipairs({ Comm.PREFIX, Comm.PREFIX_TO }) do
+		parts[#parts + 1] = ("%s %s"):format(prefix, check(prefix) and "yes" or "NO")
+	end
+	return table.concat(parts, ", ")
+end
+
+-- Debug: every addon message on our prefixes as the game delivers it, before
+-- AceComm or any filtering (once per sender and prefix every 10 seconds).
+local rawSeen = {}
+local function rawAddonMessage(prefix, _, distribution, sender)
+	if (prefix ~= Comm.PREFIX and prefix ~= Comm.PREFIX_TO) or not (FS.db and FS.db.profile.debug) then return end
+	local key = tostring(sender) .. prefix
+	if rawSeen[key] and GetTime() - rawSeen[key] < 10 then return end
+	rawSeen[key] = GetTime()
+	FS:Debug("the game delivered a %s message from %s via %s", prefix, tostring(sender), tostring(distribution))
+end
+
 FS:OnEnableHook(function()
 	FS:RegisterComm(Comm.PREFIX)
 	FS:RegisterComm(Comm.PREFIX_TO)
+	FS:Debug("addon message prefixes registered: %s", Comm.PrefixStatus())
+	FS:ListenEvent("CHAT_MSG_ADDON", rawAddonMessage)
 	FS:ListenEvent("PLAYER_REGEN_ENABLED", function() FS:FlushQueue() end)
 	FS:ListenEvent("ZONE_CHANGED_NEW_AREA", function() FS:FlushQueue() end)
 end)

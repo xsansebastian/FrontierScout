@@ -174,9 +174,10 @@ function M.new(opts)
 		CanSpeakInGuildChat = function() return state.canSpeak ~= false end,
 	}
 	env.C_ChatInfo = {
+		IsAddonMessagePrefixRegistered = function(prefix) return not (state.unregistered and state.unregistered[prefix]) end,
 		SendAddonMessage = function(prefix, text, distribution)
 			state.probes = (state.probes or 0) + 1
-			return state.sendResult or 0, prefix, text, distribution
+			return state.sendResult or (state.refuse and state.refuse[distribution]) or 0, prefix, text, distribution
 		end,
 	}
 	-- Chat channels (only with opts.channels): numbers from 5 up.
