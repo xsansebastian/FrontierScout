@@ -84,7 +84,7 @@ describe("Curation over the guild network", function()
 		arch.FS:Approve(p.pid)
 		for i = #net.queue, 1, -1 do
 			local item = net.queue[i]
-			if item.client == mem and mem.ns.Comm.Decode(item.text).t == "APPR" then table.remove(net.queue, i) end
+			if item.client == mem and wow.decode(mem.ns, item).t == "APPR" then table.remove(net.queue, i) end
 		end
 		net:Flush()
 		assert.equals("approved", mine(mem, p.pid).status)
@@ -148,7 +148,7 @@ describe("Curation over the guild network", function()
 		mem.FS:SayHello(true)
 		net:Flush()
 		for i = before + 1, #arch.state.sent do
-			local msg = arch.ns.Comm.Decode(arch.state.sent[i].text)
+			local msg = wow.decode(arch.ns, arch.state.sent[i])
 			assert.are_not.equal("QDEC", msg.t)
 		end
 	end)
@@ -221,7 +221,7 @@ describe("Curation over the guild network", function()
 		mem.FS:Send("PACK", { pid = "x" }, "WHISPER", "Arch-Realm")
 		local last = mem.state.sent[#mem.state.sent]
 		assert.equals("GUILD", last.distribution)
-		assert.equals("Arch-Realm", mem.ns.Comm.Decode(last.text).to)
+		assert.equals("Arch-Realm", select(2, wow.decode(mem.ns, last)))
 		-- Mem2 gets it on the guild channel too, but it isn't for them.
 		local got
 		net:Client("Mem2").FS:OnMessageType("PACK", function() got = true end)

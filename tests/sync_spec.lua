@@ -85,7 +85,7 @@ describe("Sync", function()
 		local mem = net:Client("Mem")
 		local wants = 0
 		for _, s in ipairs(mem.state.sent) do
-			if mem.ns.Comm.Decode(s.text).t == "WANT" then wants = wants + 1 end
+			if wow.decode(mem.ns, s).t == "WANT" then wants = wants + 1 end
 		end
 		assert.equals(3, wants) -- 250 ids in chunks of 100
 	end)
@@ -135,9 +135,9 @@ describe("Sync", function()
 		-- BUSY goes over the guild channel, addressed to one member.
 		local busyFor = {}
 		for _, item in ipairs(net.queue) do
-			local msg = item.client.ns.Comm.Decode(item.text)
-			if msg.t == "BUSY" and not busyFor[msg.to] then
-				busyFor[msg.to] = true
+			local msg, to = wow.decode(item.client.ns, item)
+			if msg.t == "BUSY" and not busyFor[to] then
+				busyFor[to] = true
 				busy = busy + 1
 			end
 		end
@@ -194,18 +194,17 @@ describe("Delivery without working whispers", function()
 		assert.equals("approved", gm.FS.store.bucket.mine[p.pid].status)
 	end)
 
-	it("a member's download switches to the guild channel when whispers never arrive", function()
+	it("a member downloads everything without a single whisper", function()
 		local net = network()
 		noWhispers(net)
 		local arch, mem = net:Client("Arch"), net:Client("Mem")
 		arch.state.bus = nil
 		for i = 1, 5 do arch.FS:SaveEntry(nil, data("E" .. i)) end
 		arch.state.bus = net
-		net:Tick() -- HELLO, ARCH (guild), SYNCREQ (guild), MANIFEST (whisper: lost)
-		assert.same({}, titles(mem))
-		mem.state.time = 2000 -- the manifest never came
-		mem.FS:SayHello(true) -- next ARCH starts a new pull, asking for the guild channel
-		net:Flush()
+		net:Tick()
 		assert.equals(5, #mem.FS.store:All())
+		for _, c in ipairs({ arch, mem }) do
+			for _, m in ipairs(c.state.sent) do assert.equals("GUILD", m.distribution) end
+		end
 	end)
 end)

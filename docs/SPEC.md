@@ -41,7 +41,7 @@ telling guildmates about. Discoveries are:
 | Client | WoW Forever, Mainline 12.x API (`WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`). Beta interface **16001**; the TOC also lists current Retail interfaces so the addon can be tested on Retail. |
 | Lua | 5.1 (WoW flavour), `bit` library available. |
 | Maps | `C_Map` (uiMapID-based). Positions stored as uiMapID + normalized x/y. |
-| Comms | `C_ChatInfo.SendAddonMessage` via AceComm, channels `GUILD` and `WHISPER` only. |
+| Comms | `C_ChatInfo.SendAddonMessage` via AceComm, channel `GUILD` only (messages for one player are addressed, §3.3). |
 | Waypoints | `C_Map.SetUserWaypoint` + `C_SuperTrack` (native) or TomTom API. |
 | Midnight restrictions | Addon comms and some unit data are restricted in combat / instanced content, and some values can be *secret* (`issecretvalue`). FrontierScout is open-world only and **pauses all sync while `InCombatLockdown()` or `IsInInstance()`** (outgoing messages are queued), and never reads unit data that is secret. See §6.6 on send results. |
 
@@ -117,13 +117,16 @@ FrontierScoutDB = {
 
 ### 3.3 Transport isolation
 
-- AceComm prefix: **`FScout`** (≤16 chars), registered with `C_ChatInfo.RegisterAddonMessagePrefix`.
-- Channels: **`GUILD`** (broadcasts) and **`WHISPER`** (targeted transfers) only. Never
-  `PARTY`/`RAID`/custom channels.
+- AceComm prefixes (≤16 chars), registered with `C_ChatInfo.RegisterAddonMessagePrefix`:
+  **`FScout`** for broadcasts and **`FScoutTo`** for messages to one player.
+- Channel: **`GUILD`** only. Never `WHISPER` (addon whispers to WoW Forever's "Name Surname" names
+  are lost without an error, §4.5) or `PARTY`/`RAID`/custom channels, so only guild members can
+  send data in.
+- A `FScoutTo` message is `<recipient full name>\001<encoded payload>`. Everyone else skips it
+  before rate limiting or decoding; the recipient is matched with `FS:IsMe` (roster and
+  `UnitFullName` forms, ignoring realm, spaces and case).
 - Every message envelope carries `v` (protocol version) and `g` (guildKey). Messages whose `g`
   doesn't match the receiver's active guildKey are dropped.
-- `WHISPER` messages are accepted **only if the sender is in the current guild roster**
-  (roster cache, §4.5). This blocks outsiders from whispering data in.
 
 ---
 
@@ -226,14 +229,12 @@ end
 - Stores `fullName (Name-Realm) → { rankIndex, officerNoteHasTag, online }`.
 - All ACL and archivist checks go through the cache and use **current** rank at receive time.
 - Names are always normalized to `Name-Realm` internally (`Ambiguate` only for display).
-- **WoW Forever names** (found in the beta): characters are "Name Surname" (with a space) and are
-  whispered as `Name Surname` *without* the realm; `Name Surname-Realm` fails with "No player named
-  … is currently playing". Whisper targets therefore drop our own realm (`Guild.WhisperName`).
+- **WoW Forever names** (found in the beta): characters are "Name Surname" (with a space). Whispers
+  to `Name Surname-Realm` fail with "No player named … is currently playing", and addon whispers
+  to `Name Surname` didn't arrive either, so the addon doesn't whisper at all (§3.3).
 - The player is found in the roster **by GUID** (`GetGuildRosterInfo` 17th return vs.
   `UnitGUID("player")`), and that roster name is the player's identity, because `UnitFullName` can
-  differ from the roster name. The addon never whispers itself.
-- "Player not found" system messages caused by the addon's own whispers are hidden, and that
-  member is marked offline so nothing is resent to them.
+  differ from the roster name.
 
 ### 4.6 Rank changes & revocation
 
@@ -370,6 +371,8 @@ must **ignore unknown categories** rather than error.
 
 ### 6.4 Messages
 
+"WHISPER" below means a guild message addressed to that one player (`FScoutTo`, §3.3).
+
 | Type | Channel | From → To | Payload | Purpose |
 |---|---|---|---|---|
 | `HELLO` | GUILD | any → all | `root, count, role, open` | Announce presence after login (15–45 s random delay); `open` = up to 50 ids of my queued, undecided proposals |
@@ -412,22 +415,19 @@ must **ignore unknown categories** rather than error.
    apply it. The proposal is marked decided in `QSYNC`, so other archivists drop it from their queues.
 3. Reject → `REJ` to the author (or held until the author's next `HELLO`).
 
-**Transport on WoW Forever (from the beta):** whispers to "Name Surname" names can't be relied on,
-so:
+**Transport on WoW Forever (from the beta):** addon whispers to "Name Surname" names are lost, so:
 - `PROP` is **broadcast on GUILD**: every archivist that hears it queues it, everyone else ignores
   it. The member doesn't need to know who the archivists are.
-- Small addressed messages (`ARCH` replies, `SYNCREQ`, `WANT`, `BUSY`, `PACK`, `QMISS`, `QDEC` to an
-  author) go over **GUILD with a `to` field**; clients ignore guild messages addressed to someone
-  else (`FS:IsMe` accepts the roster and `UnitFullName` forms, with or without realm).
-- `MANIFEST` and `ENT` (bulk) stay whispers; a member whose manifest doesn't arrive within 30 s
-  asks for the guild channel on the next pull (`SYNCREQ gc=true`), and any whisper that fails
-  ("No player named …") switches that player to the guild channel.
+- Every message for one player (the "WHISPER" rows in §6.4, bulk `MANIFEST`/`ENT`/`QSYNC`
+  included) is an **addressed guild message** (§3.3).
+- An author whose submission is approved but whose `APPR` hasn't arrived 15 s after the `QDEC`
+  pulls from that archivist.
 - An archivist credits a received proposal to its **sender** (server-verified), not to the author
   name inside it, which can differ on Forever and can't be forged this way.
 
 **Implementation notes (M4)**
 
-- An archivist answers a `HELLO` with a whispered `ARCH`, so a login doesn't make every archivist
+- An archivist answers a `HELLO` with an `ARCH` addressed to that player, so a login doesn't make every archivist
   talk on the guild channel. A `HELLO` with `role=A` from another archivist whose root differs
   makes the receiver pull from it too, so archivists converge in both directions.
 - `WANT` goes in chunks of 100 ids; the archivist marks the last `ENT` of the last chunk `done`.
@@ -564,7 +564,7 @@ end
 
 | Threat | Mitigation |
 |---|---|
-| A non-guild player whispers fake data | Envelope `g` check + WHISPER sender must be in the guild roster |
+| A non-guild player whispers fake data | Whispers are ignored; only `GUILD` messages with the right envelope `g` are read |
 | A member on a modified client broadcasts fake `APPR`/`ENT` | Receivers require the sender to pass the archivist check (§4.4) |
 | An unauthorized rank submits proposals | Archivists re-check the ACL on receipt; clients also hide the UI |
 | A member edits someone else's entry with `eo` rights only | Archivist checks `entry.author == sender` for `eo`/`do` |
