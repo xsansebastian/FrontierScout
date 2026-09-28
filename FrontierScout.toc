@@ -1,0 +1,15 @@
+## Interface: 16001, 120105, 120100
+## Title: FrontierScout
+## Notes: Guild-private atlas of discoveries: rares, vendors, secrets, treasures and events.
+## Author: xsansebastian
+## Version: @project-version@
+## SavedVariables: FrontierScoutDB
+## OptionalDeps: TomTom
+## X-License: MIT
+## X-Website: https://github.com/xsansebastian/FrontierScout
+
+embeds.xml
+
+Locales\enUS.lua
+
+Core\Init.lua
