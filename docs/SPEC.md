@@ -298,8 +298,9 @@ Proposal = {
 ### 5.5 Coordinates
 
 - Captured with `C_Map.GetBestMapForUnit("player")` + `C_Map.GetPlayerMapPosition(map, "player")`.
-- Map-click capture: right-click on the world map canvas → "Add discovery here" uses
-  `WorldMapFrame:GetNormalizedCursorPosition()` and the displayed map ID.
+- Map-click capture: **Ctrl + right-click** on the world map canvas (plain right-click already
+  zooms out) opens the dialog at `ScrollContainer:GetNormalizedCursorPosition()` on the
+  displayed map ID.
 - HereBeDragons translates coordinates between parent and child maps for display.
 
 ### 5.6 Forward compatibility (routes, v2)
@@ -400,13 +401,15 @@ must **ignore unknown categories** rather than error.
 - Hover: tooltip with title, subtype, description excerpt, author, "approved by", respawn/schedule.
 - Click: opens the entry in the side panel. Shift-click: set waypoint. Right-click: context
   menu (Waypoint, Edit, Delete, Report outdated).
-- Filter dropdown added to the world map's tracking/filter button area: toggle categories and
-  subtypes.
+- Category toggles live in the side panel header (§7.3) and in Options; they filter both the
+  pins and the panel list. Subtype filters: v1.1.
+- Only the shown continent's entries get pin frames (rebuilt when the continent or the data
+  changes), so thousands of entries don't mean thousands of frames.
 
 ### 7.2 Minimap pins
 
-- HereBeDragons-Pins `AddMinimapIconMap`, same icons at smaller size, optional edge-clamp for
-  nearby entries (configurable radius).
+- HereBeDragons-Pins `AddMinimapIconMap`, same icons at smaller size, for the player's zone only
+  (rebuilt on `ZONE_CHANGED_NEW_AREA`). Optional "keep on the minimap edge" for distant pins.
 - Per-category toggle, separate from the world map filters.
 
 ### 7.3 Map side panel
@@ -537,6 +540,7 @@ FrontierScout/
     Waypoint.lua             -- TomTom / native
   UI/
     Icons.lua
+    Widgets.lua              -- list rows, buttons, detail text shared by browser and panel
     MapPins.lua              -- world map + minimap pins (HBD)
     MapPanel.lua             -- world map side panel
     Browser.lua              -- main window + tabs
@@ -562,7 +566,7 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
 |---|---|---|---|
 | M0 | Scaffold | TOC, libs, DB, slash cmd, luacheck/busted CI | Loads on Forever beta with no Lua errors |
 | M1 | Local atlas | Store, capture, edit dialog, browser (Discoveries tab), waypoints | Can create, browse and waypoint local entries. *Until M5, every write goes straight into the local canonical set, approved by its writer.* |
-| M2 | Map surfaces | World map pins, minimap pins, side panel, tooltips, filters | Entries visible on all four surfaces |
+| M2 | Map surfaces | World map pins, minimap pins, side panel, tooltips, filters, display options | Entries visible on all four surfaces |
 | M3 | Guild & ACL | guildKey isolation, roster cache, Guild Info tag, officer-note archivists, Guild Setup UI | ACL correctly gates UI in a 3-rank test guild |
 | M4 | Sync | Digest, HELLO/ARCH, SYNCREQ…ENT, APPR live push | Two clients converge from empty and after divergent edits |
 | M5 | Curation | Proposals, outbox, review queue, QSYNC, reports, tombstones | End-to-end submit → approve → all members see it |

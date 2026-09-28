@@ -47,6 +47,17 @@ function Query.NewMapResolver(getMapInfo)
 		return c
 	end
 
+	-- True when `map` is `root` or lies inside it (e.g. a zone inside a continent).
+	function r.IsWithin(map, root)
+		local seen, cur = 0, map
+		while cur and cur > 0 and seen < 20 do
+			if cur == root then return true end
+			local info = getMapInfo(cur)
+			cur, seen = info and info.parentMapID, seen + 1
+		end
+		return false
+	end
+
 	function r.Name(map)
 		local info = map and map > 0 and getMapInfo(map) or nil
 		return info and info.name or nil
@@ -132,3 +143,70 @@ function Query.ZoneTree(entries, resolver, otherName)
 	end
 	return rows
 end
+
+-- Entries to pin while `map` is shown, in enabled categories (`cats`).
+-- scope "continent": everything on the same continent (the world map shows
+-- pins on their map and its parents); scope "zone": the same zone only
+-- (the minimap). Maps without a continent fall back to the zone.
+function Query.PinsFor(entries, cats, resolver, map, scope)
+	local list = {}
+	if not map then return list end
+	local zone = resolver.Zone(map)
+	local continent = scope == "continent" and resolver.Continent(map) or 0
+	for _, e in ipairs(entries) do
+		if cats[e.cat] then
+			local ok
+			if continent ~= 0 then
+				ok = resolver.Continent(e.map) == continent
+			else
+				ok = resolver.Zone(e.map) == zone
+			end
+			if ok then list[#list + 1] = e end
+		end
+	end
+	return list
+end
+
+-- Entries on `map` or inside it, sorted by category order then title.
+function Query.Within(entries, resolver, map, text, catOrder)
+	local rank = {}
+	for i, cat in ipairs(catOrder) do rank[cat] = i end
+	local list = {}
+	for _, e in ipairs(entries) do
+		if rank[e.cat] and resolver.IsWithin(e.map, map) and Query.Matches(e, { text = text }, resolver) then
+			list[#list + 1] = e
+		end
+	end
+	table.sort(list, function(a, b)
+		if a.cat ~= b.cat then return rank[a.cat] < rank[b.cat] end
+		return byTitle(a, b)
+	end)
+	return list
+end
+
+-- Lookup tables for tooltips: npc[npcID] and item[itemID] -> list of entries.
+-- Items index notable-item entries and vendors that sell the item.
+function Query.BuildIndex(entries)
+	local index = { npc = {}, item = {} }
+	local function add(t, key, e)
+		local list = t[key]
+		if not list then
+			list = {}
+			t[key] = list
+		end
+		list[#list + 1] = e
+	end
+	for _, e in ipairs(entries) do
+		if e.npcID then add(index.npc, e.npcID, e) end
+		if e.cat == "item" or e.sub == "vendor" then
+			for _, item in ipairs(e.items or {}) do add(index.item, item.id, e) end
+		end
+	end
+	for _, t in pairs(index) do
+		for _, list in pairs(t) do table.sort(list, byTitle) end
+	end
+	return index
+end
+
+-- Shared resolver over the game's map data.
+ns.Maps = Query.NewMapResolver(function(map) return C_Map.GetMapInfo(map) end)

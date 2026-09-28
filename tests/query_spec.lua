@@ -91,3 +91,54 @@ describe("Query.ZoneTree", function()
 		assert.same({}, Query.ZoneTree({}, resolver(), "Other"))
 	end)
 end)
+
+describe("Query map helpers", function()
+	local r
+	before_each(function() r = resolver() end)
+
+	it("knows which maps lie within others", function()
+		assert.is_true(r.IsWithin(100, 12))
+		assert.is_true(r.IsWithin(100, 100))
+		assert.is_false(r.IsWithin(1, 100))
+		assert.is_false(r.IsWithin(50, 12))
+	end)
+
+	it("picks pins for a continent or a zone", function()
+		local all = { entry("a", "A", 1), entry("b", "B", 100), entry("c", "C", 7, { cat = "npc" }), entry("d", "D", 50) }
+		local cats = { location = true, npc = true }
+		local function ids(list)
+			local out = {}
+			for _, e in ipairs(list) do out[#out + 1] = e.id end
+			table.sort(out)
+			return out
+		end
+		assert.same({ "a", "b", "c" }, ids(Query.PinsFor(all, cats, r, 1, "continent")))
+		assert.same({ "a", "b" }, ids(Query.PinsFor(all, cats, r, 100, "zone")))
+		assert.same({ "d" }, ids(Query.PinsFor(all, cats, r, 50, "continent")))
+		assert.same({ "a", "b" }, ids(Query.PinsFor(all, { location = true }, r, 12, "continent")))
+		assert.same({}, Query.PinsFor(all, cats, r, nil, "zone"))
+	end)
+
+	it("lists entries within a map grouped by category", function()
+		local all = {
+			entry("a", "Zed", 1), entry("b", "Bob", 100, { cat = "npc", sub = "rare" }),
+			entry("c", "Amy", 7), entry("d", "Out", 50),
+		}
+		local out = {}
+		for _, e in ipairs(Query.Within(all, r, 12, "", { "npc", "location" })) do out[#out + 1] = e.id end
+		assert.same({ "b", "c", "a" }, out)
+		assert.equals(1, #Query.Within(all, r, 1, "zed", { "npc", "location" }))
+	end)
+
+	it("indexes NPCs, notable items and vendor stock", function()
+		local rare = entry("r", "Rare", 1, { cat = "npc", sub = "rare", npcID = 5 })
+		local vendor = entry("v", "Vendor", 1, { cat = "npc", sub = "vendor", npcID = 6, items = { { id = 100 } } })
+		local drop = entry("i", "Drop", 1, { cat = "item", sub = "drop", items = { { id = 100 }, { id = 101 } } })
+		local lore = entry("l", "Lore", 1, { items = { { id = 102 } } })
+		local index = Query.BuildIndex({ rare, vendor, drop, lore })
+		assert.same({ rare }, index.npc[5])
+		assert.same({ drop, vendor }, index.item[100])
+		assert.same({ drop }, index.item[101])
+		assert.is_nil(index.item[102])
+	end)
+end)

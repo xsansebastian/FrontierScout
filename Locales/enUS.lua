@@ -113,3 +113,36 @@ L["Delete"] = true
 L["New"] = true
 L["No discoveries here yet.\nClick New or type /fs add."] = true
 L["Delete \"%s\"?"] = true
+
+-- Commands (M2)
+L["open the options"] = true
+
+-- Tooltips
+L["%d items"] = true
+L["Added by %s"] = true
+L["Approved by %s"] = true
+L["Shift-click: waypoint · Right-click: menu"] = true
+L["sold at %s"] = true
+
+-- Map pins
+L["Show in browser"] = true
+
+-- Map side panel
+L["No discoveries on this map."] = true
+L["Ctrl-right-click the map to add a discovery there."] = true
+L["Back"] = true
+L["Show or hide FrontierScout discoveries"] = true
+
+-- Options
+L["Show pins"] = true
+L["Icon size"] = true
+L["Categories"] = true
+L["World map"] = true
+L["Minimap"] = true
+L["Keep distant pins on the minimap edge"] = true
+L["General"] = true
+L["Show discoveries in NPC and item tooltips"] = true
+L["Waypoints"] = true
+L["TomTom if installed, else the map pin"] = true
+L["Map pin only"] = true
+L["TomTom only"] = true

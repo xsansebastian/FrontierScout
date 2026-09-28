@@ -109,7 +109,7 @@ describe("Edit dialog", function()
 		local state, FS = boot()
 		state.env.MerchantFrame = frames.fake("MerchantFrame")
 		state.env.GetMerchantNumItems = function() return 0 end
-		FS:MERCHANT_SHOW()
+		wow.fire(state, "MERCHANT_SHOW")
 		FS.scoutButton:Click()
 		assert.equals("vendor", frames.find(FS.editor, "Type").value)
 	end)

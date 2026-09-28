@@ -50,8 +50,11 @@ describe("FS:RefreshGuild", function()
 	it("registers guild events on enable", function()
 		local state, FS = wow.boot()
 		FS:OnEnable()
-		assert.equals("RefreshGuild", state.events.PLAYER_GUILD_UPDATE)
-		assert.equals("RefreshGuild", state.events.PLAYER_ENTERING_WORLD)
+		state.env.IsInGuild = function() return true end
+		state.env.GetGuildInfo = function() return "Wardens" end
+		wow.fire(state, "PLAYER_GUILD_UPDATE")
+		assert.equals("name:Realm:Wardens", FS.guildKey)
+		assert.is_function(state.events.PLAYER_ENTERING_WORLD)
 	end)
 
 	it("activates the guild bucket and announces it once", function()

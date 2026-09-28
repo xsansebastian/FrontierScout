@@ -37,7 +37,7 @@ function fakeMethods:Enable() self.enabled = true end
 function fakeMethods:Disable() self.enabled = false end
 function fakeMethods:HasFocus() return self.focus end
 function fakeMethods:Insert(text) self.text = self.text .. text end
-function fakeMethods:Click() self.scripts.OnClick(self) end
+function fakeMethods:Click(button) self.scripts.OnClick(self, button or "LeftButton") end
 
 -- ScrollBox: SetDataProvider runs the view's element initializer on a fresh
 -- row for every element, and keeps the rows in box.rows.
@@ -90,6 +90,51 @@ function M.install(env, state)
 	env.C_Texture = { GetAtlasInfo = function() return nil end }
 	env.C_Item = { GetItemInfo = function(id) return "Item " .. id, "[Item " .. id .. "]" end }
 	env.ChatFrameUtil = { InsertLink = function() end }
+
+	-- Map pins: HereBeDragons-Pins records icons per kind.
+	state.pins = { world = {}, mini = {} }
+	state.libs["HereBeDragons-Pins-2.0"] = {
+		AddWorldMapIconMap = function(_, _, icon, map, x, y, flag)
+			state.pins.world[#state.pins.world + 1] = { icon = icon, map = map, x = x, y = y, flag = flag }
+		end,
+		AddMinimapIconMap = function(_, _, icon, map, x, y, parent, edge)
+			state.pins.mini[#state.pins.mini + 1] = { icon = icon, map = map, x = x, y = y, parent = parent, edge = edge }
+		end,
+		RemoveAllWorldMapIcons = function() state.pins.world = {} end,
+		RemoveAllMinimapIcons = function() state.pins.mini = {} end,
+	}
+	env.HBD_PINS_WORLDMAP_SHOW_CONTINENT = 2
+	env.C_Map = { GetMapInfo = function() end, GetBestMapForUnit = function() end }
+	env.WorldMapFrame = fake("WorldMapFrame")
+	env.WorldMapFrame.GetMapID = function() return state.mapID end
+	env.WorldMapFrame.ScrollContainer = fake("ScrollContainer")
+	env.WorldMapFrame.ScrollContainer.GetNormalizedCursorPosition = function() return 0.25, 0.75 end
+	env.Minimap = fake("Minimap")
+	env.IsShiftKeyDown = function() return state.shift end
+	env.IsControlKeyDown = function() return state.ctrl end
+	state.menus = {}
+	env.MenuUtil = {
+		CreateContextMenu = function(owner, generator)
+			local root = { buttons = {} }
+			function root.CreateTitle() end
+			function root.CreateButton(r, text, fn) r.buttons[text] = fn end
+			generator(owner, root)
+			state.menus[#state.menus + 1] = root
+		end,
+	}
+	state.tooltipCalls = {}
+	env.Enum = { TooltipDataType = { Unit = 2, Item = 0 } }
+	env.TooltipDataProcessor = {
+		AddTooltipPostCall = function(kind, fn) state.tooltipCalls[kind] = fn end,
+	}
+	state.options = {}
+	state.libs["AceConfig-3.0"] = {
+		RegisterOptionsTable = function(_, name, fn) state.options[name] = fn end,
+	}
+	state.libs["AceConfigDialog-3.0"] = {
+		AddToBlizOptions = function() end,
+		Open = function(_, name) state.optionsOpened = name end,
+	}
 
 	-- AceGUI: widgets record text, children and callbacks.
 	state.widgets = {}

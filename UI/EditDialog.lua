@@ -251,7 +251,7 @@ end
 
 -- "Scout" button on the merchant window ---------------------------------------
 
-function FS:MERCHANT_SHOW()
+function FS:AddScoutButton()
 	if self.scoutButton or not MerchantFrame then return end
 	local b = CreateFrame("Button", nil, MerchantFrame, "UIPanelButtonTemplate")
 	b:SetSize(64, 20)
@@ -266,6 +266,7 @@ function FS:MERCHANT_SHOW()
 	b:SetScript("OnLeave", GameTooltip_Hide)
 	self.scoutButton = b
 end
+FS:ListenEvent("MERCHANT_SHOW", function() FS:AddScoutButton() end)
 
 -- Key binding (Bindings.xml).
 function FrontierScout_AddBinding()

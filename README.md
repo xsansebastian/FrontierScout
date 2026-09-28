@@ -3,7 +3,8 @@ Crowdsourced discovery addon for World of Warcraft: Forever. Automatically recor
 
 ## Status
 
-Milestone **M1 (local atlas)**: record discoveries, browse them by zone and set waypoints.
+Milestones **M1 (local atlas)** and **M2 (map surfaces)**: record discoveries, browse them by
+zone, see them on the world map, minimap and tooltips, and set waypoints.
 Discoveries are stored per guild, but they are **not shared yet**: guild sync arrives in M4.
 See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
 
@@ -22,6 +23,14 @@ See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
 - **Browse:** `/fs`, the addon compartment (the addons button on the minimap), or a key binding
   (Options → Keybindings → AddOns → FrontierScout). Pick a zone on the left, search, or toggle
   categories. Select a discovery to see its details, set a waypoint, edit or delete it.
+- **On the map:** discoveries show as pins on the world map and minimap. Hover for details,
+  click to open them in the side panel (the **FS** button on the map toggles it), shift-click
+  for a waypoint, right-click for a menu. **Ctrl + right-click** on the world map records a
+  discovery at that spot.
+- **Tooltips:** NPCs with a discovery and items that are noted or sold by a recorded vendor get a
+  FrontierScout line.
+- **Options:** `/fs config` or the game's AddOns settings: pins per category, icon size,
+  tooltips, waypoints.
 - **Waypoints** go to TomTom when it is installed, otherwise to Blizzard's map pin.
   `/fs waypoints native` or `/fs waypoints tomtom` forces one.
 
@@ -37,6 +46,7 @@ Libraries are already included in `Libs/`; nothing else to install.
 | `/fs help` | List commands |
 | `/fs add [title]` | Record a discovery at your position (pre-filled from your target or the open vendor) |
 | `/fs waypoints [auto\|native\|tomtom]` | Show or set where waypoints go (auto = TomTom if installed) |
+| `/fs config` | Open the options |
 | `/fs status` | Addon version, client build and interface, guild, number of discoveries, saved-data session count |
 | `/fs version` | Addon version |
 | `/fs debug` | Toggle debug output |

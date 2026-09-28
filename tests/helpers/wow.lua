@@ -165,6 +165,16 @@ function M.boot(opts)
 	return state, ns.FS, ns
 end
 
+-- Delivers a game event to the addon's registered handler.
+function M.fire(state, event, ...)
+	local handler = assert(state.events[event], "no handler for " .. event)
+	if type(handler) == "string" then
+		state.ns.FS[handler](state.ns.FS, event, ...)
+	else
+		handler(event, ...)
+	end
+end
+
 -- Runs a slash command the way WoW would (e.g. "status").
 function M.slash(state, input)
 	local method = state.chatCommands.fs

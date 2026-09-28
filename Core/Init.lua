@@ -23,6 +23,10 @@ local defaults = {
 	profile = {
 		debug = false,
 		waypointMode = "auto", -- "auto" | "native" | "tomtom"
+		worldmap = { enabled = true, scale = 1, cats = { npc = true, location = true, item = true, event = true } },
+		minimap = { enabled = true, scale = 1, edge = false, cats = { npc = true, location = true, item = true, event = true } },
+		panel = { shown = true },
+		tooltips = true,
 	},
 }
 
@@ -44,12 +48,42 @@ function FS:OnInitialize()
 end
 
 function FS:OnEnable()
-	self:RegisterEvent("PLAYER_ENTERING_WORLD", "RefreshGuild")
-	self:RegisterEvent("PLAYER_GUILD_UPDATE", "RefreshGuild")
-	self:RegisterEvent("GUILD_ROSTER_UPDATE", "RefreshGuild")
-	if self.MERCHANT_SHOW then self:RegisterEvent("MERCHANT_SHOW") end
+	self:ListenEvent("PLAYER_ENTERING_WORLD", function() self:RefreshGuild() end)
+	self:ListenEvent("PLAYER_GUILD_UPDATE", function() self:RefreshGuild() end)
+	self:ListenEvent("GUILD_ROSTER_UPDATE", function() self:RefreshGuild() end)
+	for _, fn in ipairs(self.enableHooks or {}) do fn() end
 	self:RefreshGuild()
 end
+
+-- Runs `fn` from OnEnable (for modules loaded before the addon is enabled).
+function FS:OnEnableHook(fn)
+	self.enableHooks = self.enableHooks or {}
+	self.enableHooks[#self.enableHooks + 1] = fn
+end
+
+-- AceEvent keeps one handler per event or message and object; these let any
+-- number of modules listen. Handlers get the event/message arguments.
+local listeners = { event = {}, message = {} }
+
+local function listen(self, kind, name, fn)
+	local list = listeners[kind][name]
+	if not list then
+		list = {}
+		listeners[kind][name] = list
+		local dispatch = function(_, ...)
+			for _, f in ipairs(list) do f(...) end
+		end
+		if kind == "event" then
+			self:RegisterEvent(name, dispatch)
+		else
+			self:RegisterMessage(name, dispatch)
+		end
+	end
+	list[#list + 1] = fn
+end
+
+function FS:ListenEvent(event, fn) listen(self, "event", event, fn) end
+function FS:Listen(message, fn) listen(self, "message", message, fn) end
 
 -- Addon compartment (minimap addons menu), see AddonCompartmentFunc in the TOC.
 function FrontierScout_OnAddonCompartmentClick()
@@ -65,11 +99,12 @@ end
 -- Slash commands ----------------------------------------------------------
 
 local commands = {}
-local commandOrder = { "help", "add", "waypoints", "status", "version", "debug" }
+local commandOrder = { "help", "add", "waypoints", "config", "status", "version", "debug" }
 local commandHelp = {
 	help = L["show this help"],
 	add = L["record a discovery here (optional: title)"],
 	waypoints = L["waypoint mode: auto, native or tomtom"],
+	config = L["open the options"],
 	status = L["show addon, client and guild status"],
 	version = L["show the addon version"],
 	debug = L["toggle debug output"],
@@ -111,6 +146,10 @@ function commands.waypoints(self, args)
 		self:Print(L["Unknown waypoint mode: %s"]:format(mode))
 	end
 	self:Print(L["Waypoint mode: %s"]:format(self.db.profile.waypointMode))
+end
+
+function commands.config(self)
+	if self.OpenOptions then self:OpenOptions() end
 end
 
 function commands.version(self)

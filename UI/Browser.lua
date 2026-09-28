@@ -3,58 +3,20 @@ local _, ns = ...
 -- Discoveries browser (docs/SPEC.md §7.4, Discoveries tab): zones on the left,
 -- matching entries in the middle, the selected entry on the right.
 local FS, L = ns.FS, ns.L
-local Categories, Format, Query, Icons = ns.Categories, ns.Format, ns.Query, ns.Icons
-
-local ROW_HEIGHT = 20
-local MAX_ITEMS_SHOWN = 12
+local Categories, Query, Icons, Widgets = ns.Categories, ns.Query, ns.Icons, ns.Widgets
 
 local browser -- the frame, created on first open
 local state = { zone = nil, selected = nil, filter = { text = "", cats = {} } }
 for _, cat in ipairs(Categories.order) do state.filter.cats[cat] = true end
 
-local resolver = Query.NewMapResolver(function(map) return C_Map.GetMapInfo(map) end)
+local resolver = ns.Maps
 
-local function itemLink(id)
-	local getInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
-	local _, link = getInfo(id)
-	return link
-end
-
--- Lists --------------------------------------------------------------------------
-
-local function newList(parent)
-	local box = CreateFrame("Frame", nil, parent, "WowScrollBoxList")
-	local bar = CreateFrame("EventFrame", nil, parent, "MinimalScrollBar")
-	bar:SetPoint("TOPLEFT", box, "TOPRIGHT", 4, 0)
-	bar:SetPoint("BOTTOMLEFT", box, "BOTTOMRIGHT", 4, 0)
-	local view = CreateScrollBoxListLinearView()
-	view:SetElementExtent(ROW_HEIGHT)
-	return box, bar, view
-end
-
--- Creates the parts of a row button the first time it is used.
-local function setupRow(row, onClick)
-	if row.label then return end
-	row.bg = row:CreateTexture(nil, "BACKGROUND")
-	row.bg:SetAllPoints()
-	row.bg:SetColorTexture(1, 0.82, 0, 0.18)
-	row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-	row.icon = row:CreateTexture(nil, "ARTWORK")
-	row.icon:SetSize(16, 16)
-	row.icon:SetPoint("LEFT", 4, 0)
-	row.label = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	row.label:SetJustifyH("LEFT")
-	row.label:SetWordWrap(false)
-	row.count = row:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-	row.count:SetPoint("RIGHT", -4, 0)
-	row.label:SetPoint("RIGHT", row.count, "LEFT", -4, 0)
-	row:SetScript("OnClick", onClick)
-end
+-- Rows ---------------------------------------------------------------------------
 
 local refresh, showDetail
 
 local function zoneRowInit(row, data)
-	setupRow(row, function(self)
+	Widgets.SetupRow(row, function(self)
 		if self.data.kind == "continent" then return end
 		state.zone = self.data.map
 		refresh()
@@ -77,7 +39,7 @@ local function zoneRowInit(row, data)
 end
 
 local function entryRowInit(row, data)
-	setupRow(row, function(self)
+	Widgets.SetupRow(row, function(self)
 		state.selected = self.data.id
 		refresh()
 	end)
@@ -93,37 +55,6 @@ local function entryRowInit(row, data)
 end
 
 -- Detail pane --------------------------------------------------------------------
-
-local function detailText(e)
-	local lines = {}
-	local function add(s) lines[#lines + 1] = s end
-	add(("|cffffd100%s|r  %s (%s)"):format(Categories.Label(e.sub), resolver.Name(e.map) or "?", Format.Coords(e.x, e.y)))
-	if e.npcID then add(L["NPC ID: %d"]:format(e.npcID)) end
-	if e.desc then add("\n" .. e.desc) end
-	if e.schedule then
-		local s = e.schedule
-		if s.respawnMin then add("\n" .. L["Respawn: %d min"]:format(s.respawnMin)) end
-		if s.window then add(L["Window: %s"]:format(s.window)) end
-		if s.note then add(s.note) end
-	end
-	if e.items then
-		add("\n|cffffd100" .. L["Items"] .. "|r")
-		for i, item in ipairs(e.items) do
-			if i > MAX_ITEMS_SHOWN then
-				add(L["...and %d more"]:format(#e.items - MAX_ITEMS_SHOWN))
-				break
-			end
-			local label = itemLink(item.id) or ("item:" .. item.id)
-			add(item.cost and (label .. "  |cffaaaaaa" .. item.cost .. "|r") or label)
-		end
-	end
-	if e.tags then add("\n" .. L["Tags: %s"]:format(Format.Tags(e.tags))) end
-	add("\n|cff888888" .. L["Added by %s on %s"]:format(Ambiguate(e.author, "none"), date("%Y-%m-%d", e.createdAt)))
-	if e.rev > 1 then
-		add(L["Edited by %s on %s (revision %d)"]:format(Ambiguate(e.editedBy, "none"), date("%Y-%m-%d", e.approvedAt), e.rev))
-	end
-	return table.concat(lines, "\n") .. "|r"
-end
 
 function showDetail()
 	local d = browser.detail
@@ -142,7 +73,7 @@ function showDetail()
 	d.icon:Show()
 	Icons.Apply(d.icon, e.sub)
 	d.title:SetText(e.title)
-	d.text:SetText(detailText(e))
+	d.text:SetText(Widgets.DetailText(e))
 	d.waypoint:Enable()
 	d.edit:Enable()
 	d.delete:Enable()
@@ -179,14 +110,6 @@ end
 
 -- Construction -------------------------------------------------------------------
 
-local function panelButton(parent, text, width, onClick)
-	local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-	b:SetSize(width, 22)
-	b:SetText(text)
-	b:SetScript("OnClick", onClick)
-	return b
-end
-
 local function buildDetail(parent)
 	local d = CreateFrame("Frame", nil, parent)
 	d.icon = d:CreateTexture(nil, "ARTWORK")
@@ -197,11 +120,11 @@ local function buildDetail(parent)
 	d.title:SetPoint("RIGHT", -4, 0)
 	d.title:SetJustifyH("LEFT")
 
-	d.waypoint = panelButton(d, L["Waypoint"], 90, function() FS:Waypoint(d.entry) end)
+	d.waypoint = Widgets.Button(d, L["Waypoint"], 90, function() FS:Waypoint(d.entry) end)
 	d.waypoint:SetPoint("BOTTOMLEFT", 4, 4)
-	d.edit = panelButton(d, L["Edit"], 70, function() FS:OpenEditor(d.entry.id) end)
+	d.edit = Widgets.Button(d, L["Edit"], 70, function() FS:OpenEditor(d.entry.id) end)
 	d.edit:SetPoint("LEFT", d.waypoint, "RIGHT", 4, 0)
-	d.delete = panelButton(d, L["Delete"], 70, function()
+	d.delete = Widgets.Button(d, L["Delete"], 70, function()
 		StaticPopup_Show("FRONTIERSCOUT_DELETE", d.entry.title, nil, d.entry.id)
 	end)
 	d.delete:SetPoint("LEFT", d.edit, "RIGHT", 4, 0)
@@ -252,7 +175,7 @@ local function buildFilters(f)
 
 	f.search = search
 
-	local new = panelButton(f, L["New"], 80, function() FS:OnSlashCommand("add") end)
+	local new = Widgets.Button(f, L["New"], 80, function() FS:OnSlashCommand("add") end)
 	new:SetPoint("TOPRIGHT", -12, -28)
 end
 
@@ -279,7 +202,7 @@ local function build()
 	inset:SetPoint("TOPLEFT", 8, -60)
 	inset:SetPoint("BOTTOMRIGHT", -8, 8)
 
-	local zones, zoneBar, zoneView = newList(inset)
+	local zones, zoneBar, zoneView = Widgets.NewList(inset)
 	zones:SetPoint("TOPLEFT", 6, -6)
 	zones:SetPoint("BOTTOMLEFT", 6, 6)
 	zones:SetWidth(200)
@@ -287,7 +210,7 @@ local function build()
 	ScrollUtil.InitScrollBoxListWithScrollBar(zones, zoneBar, zoneView)
 	f.zones = zones
 
-	local entries, entryBar, entryView = newList(inset)
+	local entries, entryBar, entryView = Widgets.NewList(inset)
 	entries:SetPoint("TOPLEFT", zones, "TOPRIGHT", 22, 0)
 	entries:SetPoint("BOTTOMLEFT", zones, "BOTTOMRIGHT", 22, 0)
 	entries:SetWidth(280)
@@ -346,13 +269,13 @@ function FS:ToggleBrowser()
 	if browser and browser:IsShown() then browser:Hide() else self:OpenBrowser() end
 end
 
-FS:RegisterMessage("FRONTIERSCOUT_ENTRIES_CHANGED", function() refresh() end)
-FS:RegisterMessage("FRONTIERSCOUT_GUILD_CHANGED", function()
+FS:Listen("FRONTIERSCOUT_ENTRIES_CHANGED", function() refresh() end)
+FS:Listen("FRONTIERSCOUT_GUILD_CHANGED", function()
 	state.zone, state.selected = nil, nil
 	if browser then browser:Hide() end
 end)
 -- Item links in the detail pane fill in once the client has the item data.
-FS:RegisterEvent("GET_ITEM_INFO_RECEIVED", function()
+FS:ListenEvent("GET_ITEM_INFO_RECEIVED", function()
 	local e = browser and browser:IsShown() and browser.detail.entry
 	if e and e.items then showDetail() end
 end)

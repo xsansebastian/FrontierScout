@@ -24,5 +24,10 @@ Core\Capture.lua
 Core\Waypoint.lua
 
 UI\Icons.lua
+UI\Widgets.lua
+UI\Tooltip.lua
 UI\EditDialog.lua
 UI\Browser.lua
+UI\MapPins.lua
+UI\MapPanel.lua
+UI\Options.lua

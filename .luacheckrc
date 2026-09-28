@@ -1,6 +1,8 @@
 std = "lua51"
 max_line_length = false
 exclude_files = { "Libs/", ".luarocks/", "lua_modules/" }
+-- Addon methods (FS:Foo) often don't use self.
+self = false
 
 -- WoW API used by the addon. Keep sorted; add as modules grow.
 read_globals = {
@@ -19,6 +21,7 @@ read_globals = {
 	"CreateFrame",
 	"CreateScrollBoxListLinearView",
 	"date",
+	"Enum",
 	"GameTooltip",
 	"GameTooltip_Hide",
 	"GetBuildInfo",
@@ -31,19 +34,25 @@ read_globals = {
 	"GetMerchantNumItems",
 	"GetNormalizedRealmName",
 	"GetServerTime",
+	"HBD_PINS_WORLDMAP_SHOW_CONTINENT",
 	"hooksecurefunc",
 	"InCombatLockdown",
+	"IsControlKeyDown",
 	"IsInGuild",
 	"IsInInstance",
 	"issecretvalue",
+	"IsShiftKeyDown",
 	"LibStub",
+	"MenuUtil",
 	"MerchantFrame",
+	"Minimap",
 	"NO",
 	"ScrollBoxConstants",
 	"ScrollUtil",
 	"StaticPopup_Show",
 	"tinsert",
 	"TomTom",
+	"TooltipDataProcessor",
 	"UiMapPoint",
 	"UIParent",
 	"UISpecialFrames",
@@ -54,6 +63,7 @@ read_globals = {
 	"UnitIsPlayer",
 	"UnitName",
 	"wipe",
+	"WorldMapFrame",
 	"YES",
 }
 
