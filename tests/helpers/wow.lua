@@ -139,6 +139,7 @@ function M.new(opts)
 		end,
 	}
 	env.date = os.date
+	env.Ambiguate = function(name) return (name:gsub("%-.*", "")) end
 	env.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 	env.GetServerTime = function() return opts.now or 1790000000 end
 	env.GetBuildInfo = function() return "1.60.1", "70009", "Sep 25 2026", 16001 end

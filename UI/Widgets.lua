@@ -7,6 +7,9 @@ local Categories, Format = ns.Categories, ns.Format
 local Widgets = {}
 ns.Widgets = Widgets
 
+-- Browser tabs besides Discoveries: { key, label(), visible(), build(frame), refresh(frame) }.
+ns.BrowserPages = {}
+
 local ROW_HEIGHT = 20
 local MAX_ITEMS_SHOWN = 12
 

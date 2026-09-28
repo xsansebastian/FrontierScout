@@ -68,6 +68,7 @@ function showDetail()
 		d.waypoint:Disable()
 		d.edit:Disable()
 		d.delete:Disable()
+		d.report:Disable()
 		return
 	end
 	d.icon:Show()
@@ -77,6 +78,7 @@ function showDetail()
 	d.waypoint:Enable()
 	Widgets.Gate(d.edit, FS:Can("edit", e))
 	Widgets.Gate(d.delete, FS:Can("delete", e))
+	Widgets.Gate(d.report, FS:Can("report", e))
 end
 
 -- Refresh ------------------------------------------------------------------------
@@ -106,6 +108,18 @@ function refresh()
 	if state.selected and not (store and store:Get(state.selected)) then state.selected = nil end
 	showDetail()
 	browser:SetTitle(L["FrontierScout - %d discoveries"]:format(#all))
+	for _, tab in ipairs(browser.tabs) do
+		local p = browser.pages[tab.key]
+		if p then
+			tab:SetShown(p.page.visible())
+			tab:SetText(p.page.label())
+		end
+		if tab.key == browser.tab then tab:LockHighlight() else tab:UnlockHighlight() end
+	end
+	local active = browser.pages[browser.tab]
+	if active then
+		if active.page.visible() then active.page.refresh(active.frame) else FS:ShowBrowserTab("discoveries") end
+	end
 	Widgets.Gate(browser.new, FS:Can("create"))
 	browser.banner:SetShown(not FS.aclConfigured and CanEditGuildInfo())
 end
@@ -130,6 +144,10 @@ local function buildDetail(parent)
 		StaticPopup_Show("FRONTIERSCOUT_DELETE", d.entry.title, nil, d.entry.id)
 	end)
 	d.delete:SetPoint("LEFT", d.edit, "RIGHT", 4, 0)
+	d.report = Widgets.Button(d, L["Report outdated"], 120, function()
+		StaticPopup_Show("FRONTIERSCOUT_REPORT", d.entry.title, nil, d.entry.id)
+	end)
+	d.report:SetPoint("LEFT", d.delete, "RIGHT", 4, 0)
 
 	-- Long descriptions and vendor lists scroll.
 	local scroll = CreateFrame("ScrollFrame", nil, d, "ScrollFrameTemplate")
@@ -150,9 +168,14 @@ local function buildDetail(parent)
 end
 
 local function buildFilters(f)
-	local search = CreateFrame("EditBox", nil, f, "SearchBoxTemplate")
+	local top = CreateFrame("Frame", nil, f)
+	top:SetPoint("TOPLEFT", 0, -24)
+	top:SetPoint("TOPRIGHT", 0, -24)
+	top:SetHeight(30)
+	f.top = top
+	local search = CreateFrame("EditBox", nil, top, "SearchBoxTemplate")
 	search:SetSize(200, 20)
-	search:SetPoint("TOPLEFT", 16, -30)
+	search:SetPoint("TOPLEFT", 16, -6)
 	search:SetAutoFocus(false)
 	search:HookScript("OnTextChanged", function(box)
 		state.filter.text = box:GetText()
@@ -161,7 +184,7 @@ local function buildFilters(f)
 
 	local anchor = search
 	for _, cat in ipairs(Categories.order) do
-		local check = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+		local check = CreateFrame("CheckButton", nil, top, "UICheckButtonTemplate")
 		check:SetSize(24, 24)
 		check:SetPoint("LEFT", anchor, "RIGHT", anchor == search and 12 or 70, 0)
 		check:SetChecked(true)
@@ -177,12 +200,12 @@ local function buildFilters(f)
 
 	f.search = search
 
-	local new = Widgets.Button(f, L["New"], 80, function() FS:OnSlashCommand("add") end)
-	new:SetPoint("TOPRIGHT", -12, -28)
+	local new = Widgets.Button(top, L["New"], 80, function() FS:OnSlashCommand("add") end)
+	new:SetPoint("TOPRIGHT", -12, -4)
 	f.new = new
 
 	-- Shown to leadership until the guild has a FrontierScout tag.
-	f.banner = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	f.banner = top:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	f.banner:SetPoint("BOTTOMRIGHT", new, "BOTTOMLEFT", -8, 4)
 	f.banner:SetText(L["Not set up for this guild yet: only the Guild Master can write. See /fs config."])
 	f.banner:Hide()
@@ -235,14 +258,64 @@ local function build()
 	f.detail:SetPoint("TOPLEFT", entries, "TOPRIGHT", 22, 0)
 	f.detail:SetPoint("BOTTOMRIGHT", -6, 6)
 
+	-- Tabs: Discoveries plus the pages other files register in ns.BrowserPages.
+	f.pages, f.tabs = {}, {}
+	local function addTab(key, label)
+		local tab = Widgets.Button(f, label, 130, function() FS:ShowBrowserTab(key) end)
+		local prev = f.tabs[#f.tabs]
+		if prev then
+			tab:SetPoint("LEFT", prev, "RIGHT", 4, 0)
+		else
+			tab:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 8, -2)
+		end
+		tab.key = key
+		f.tabs[#f.tabs + 1] = tab
+		return tab
+	end
+	addTab("discoveries", L["Discoveries"])
+	for _, page in ipairs(ns.BrowserPages) do
+		local frame = CreateFrame("Frame", nil, f, "InsetFrameTemplate")
+		frame:SetPoint("TOPLEFT", 8, -30)
+		frame:SetPoint("BOTTOMRIGHT", -8, 8)
+		frame:Hide()
+		page.build(frame)
+		f.pages[page.key] = { page = page, frame = frame, tab = addTab(page.key, page.label()) }
+	end
+	f.tab = "discoveries"
+
 	return f
+end
+
+-- Switches the browser to tab `key` ("discoveries" or a registered page).
+function FS:ShowBrowserTab(key)
+	if not browser then return end
+	local page = browser.pages[key]
+	if page and not page.page.visible() then key = "discoveries" end
+	browser.tab = key
+	browser.top:SetShown(key == "discoveries")
+	browser.Inset:SetShown(key == "discoveries")
+	for k, p in pairs(browser.pages) do p.frame:SetShown(k == key) end
+	refresh()
+end
+
+-- Prints the outcome of a write that may have become a proposal.
+function FS:ReportWrite(result, err, title)
+	if result and result.pid then
+		self:Print(L["Submitted for review: %s"]:format(title))
+	elseif not result and err == "denied" then
+		self:Print(L["Your guild rank can't do that. Guild leadership sets this up in /fs config."])
+	end
 end
 
 StaticPopupDialogs.FRONTIERSCOUT_DELETE = {
 	text = L["Delete \"%s\"?"],
 	button1 = YES,
 	button2 = NO,
-	OnAccept = function(_, id) FS:DeleteEntry(id) end,
+	OnAccept = function(_, id)
+		local e = FS.store and FS.store:Get(id)
+		local result, err = FS:DeleteEntry(id)
+		FS:ReportWrite(result, err, e and e.title or "?")
+	end,
 	timeout = 0,
 	whileDead = true,
 	hideOnEscape = true,
@@ -280,6 +353,9 @@ end
 
 FS:Listen("FRONTIERSCOUT_ENTRIES_CHANGED", function() refresh() end)
 FS:Listen("FRONTIERSCOUT_ROSTER_UPDATED", function() refresh() end)
+FS:Listen("FRONTIERSCOUT_PROPOSALS_CHANGED", function() refresh() end)
+FS:Listen("FRONTIERSCOUT_QUEUE_CHANGED", function() refresh() end)
+FS:Listen("FRONTIERSCOUT_SYNC_DONE", function() refresh() end)
 FS:Listen("FRONTIERSCOUT_GUILD_CHANGED", function()
 	state.zone, state.selected = nil, nil
 	if browser then browser:Hide() end
@@ -294,3 +370,25 @@ end)
 function FrontierScout_ToggleBinding()
 	FS:ToggleBrowser()
 end
+
+-- Popup text boxes moved between client versions.
+local function popupText(popup)
+	local box = (popup.GetEditBox and popup:GetEditBox()) or popup.editBox or popup.EditBox
+	return box and box:GetText() or ""
+end
+ns.PopupText = popupText
+
+StaticPopupDialogs.FRONTIERSCOUT_REPORT = {
+	text = L["Report \"%s\" as outdated? What changed?"],
+	button1 = L["Report"],
+	button2 = CANCEL,
+	hasEditBox = true,
+	maxLetters = 200,
+	OnAccept = function(popup, id)
+		if FS:Report(id, popupText(popup)) then FS:Print(L["Thanks! The archivists will take a look."]) end
+	end,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+	preferredIndex = 3,
+}

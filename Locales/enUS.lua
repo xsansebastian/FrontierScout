@@ -192,3 +192,64 @@ L["none seen"] = true
 -- Sync
 L["Sync is paused in combat and instances."] = true
 L["Looking for archivists..."] = true
+
+-- Review
+L["No longer valid: %s"] = true
+L["Your submission \"%s\" was rejected: %s"] = true
+L["no reason given"] = true
+L["Your submission \"%s\" was approved."] = true
+
+-- Curation (dialog)
+L["Submitted for review: %s"] = true
+
+-- Curation (browser)
+L["Report outdated"] = true
+L["Discoveries"] = true
+L["Report \"%s\" as outdated? What changed?"] = true
+L["Report"] = true
+L["Thanks! The archivists will take a look."] = true
+
+-- Sync warnings
+L["%s sent %s but has no {FS:A} officer-note tag; ignored."] = true
+
+-- Submissions, review and sync tabs
+L["Outdated"] = true
+L["waiting for an archivist"] = true
+L["in the review queue"] = true
+L["approved"] = true
+L["rejected"] = true
+L["My submissions (%d)"] = true
+L["My submissions"] = true
+L["Nothing submitted yet."] = true
+L["Send again"] = true
+L["No archivist is online. Submissions are sent when one is."] = true
+L["Clear finished"] = true
+L["Discoveries you add, edit, delete or report are reviewed by an archivist before the guild sees them."] = true
+L["%s, sent %s"] = true
+L["Status: %s"] = true
+L["Reason: %s"] = true
+L["By %s (%s), %s"] = true
+L["Can't be approved any more: %s"] = true
+L["Warning: the entry changed since this was proposed (revision %d, now %d)."] = true
+L["Changes"] = true
+L["Reject \"%s\"? Reason (sent to the author):"] = true
+L["Reject"] = true
+L["Review (%d)"] = true
+L["Review"] = true
+L["Nothing to review."] = true
+L["Approve"] = true
+L["Show"] = true
+L["Select a proposal to review it."] = true
+L["Resolved"] = true
+L["Dismiss"] = true
+L["Warnings"] = true
+L["Sync"] = true
+L["Sync now"] = true
+L["Discoveries: %d (including deletions still spreading: %d)"] = true
+L["Last full sync: %s"] = true
+L["Archivists seen: %s"] = true
+L["Your role: %s"] = true
+L["archivist"] = true
+L["member"] = true
+L["Syncing with %s..."] = true
+L["Data hash: %08x"] = true

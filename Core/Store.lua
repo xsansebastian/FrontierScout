@@ -307,13 +307,19 @@ local function context(self)
 	}
 end
 
--- Creates (id == nil) or updates an entry in the active guild. Until curation
--- arrives (M5) every write is applied locally and approved by its writer.
--- Returns the entry, or nil and an error code.
+-- Creates (id == nil) or updates an entry in the active guild. Archivists'
+-- writes are approved on the spot; everyone else's become proposals for the
+-- review queue (SPEC §5.4). Returns the entry (archivist) or the proposal
+-- (has .pid), or nil and an error code.
 function FS:SaveEntry(id, data)
 	local store = self:GetStore()
 	if not store then return nil, "noguild" end
 	if not self:Can(id and "edit" or "create", id and store:Get(id)) then return nil, "denied" end
+	if not self:AmArchivist() then
+		local ok, err = Store.Validate(data)
+		if not ok then return nil, err end
+		return self:Propose(id and "edit" or "create", id, data)
+	end
 	local ctx = context(self)
 	local entry, err
 	if id then
@@ -328,10 +334,12 @@ function FS:SaveEntry(id, data)
 	return entry, err
 end
 
-function FS:DeleteEntry(id)
+-- Deletes (archivist) or proposes deleting (everyone else) an entry.
+function FS:DeleteEntry(id, reason)
 	local store = self:GetStore()
 	if not store then return nil, "noguild" end
 	if not self:Can("delete", store:Get(id)) then return nil, "denied" end
+	if not self:AmArchivist() then return self:Propose("delete", id, nil, reason) end
 	local t, err = store:Delete(id, context(self))
 	if t then
 		self:SendMessage("FRONTIERSCOUT_ENTRIES_CHANGED", id)

@@ -182,9 +182,13 @@ function FS:OpenEditor(id, draft)
 			frame:SetStatusText("|cffff5555" .. (ERRORS[err] or err) .. "|r")
 			return
 		end
-		self:Print(L["Saved: %s"]:format(saved.title))
 		frame:Hide()
-		if self.SelectEntry then self:SelectEntry(saved.id, false) end
+		if saved.pid then
+			self:Print(L["Submitted for review: %s"]:format(saved.data.title))
+		else
+			self:Print(L["Saved: %s"]:format(saved.title))
+			if self.SelectEntry then self:SelectEntry(saved.id, false) end
+		end
 	end
 
 	function build()

@@ -19,7 +19,7 @@ function Net.new(members, opts)
 	for _, m in ipairs(members) do
 		local state, FS, ns = wow.boot({ guild = "Wardens", player = m.name, rank = m.rank or 2, roster = roster,
 			guildInfo = opts.guildInfo or "[FS1 s=2 eo=2 ea=1 do=2 da=1 r=9 ar=1]", canViewNotes = (m.rank or 2) <= 1,
-			now = opts.now })
+			now = opts.now, ui = opts.ui })
 		state.bus = net
 		FS:OnEnable()
 		local client = { name = m.name .. "-Realm", state = state, FS = FS, ns = ns }

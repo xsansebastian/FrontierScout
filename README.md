@@ -3,10 +3,10 @@ Crowdsourced discovery addon for World of Warcraft: Forever. Automatically recor
 
 ## Status
 
-Milestones **M1–M4**: record discoveries, browse them by zone, see them on the world map,
-minimap and tooltips, set waypoints, control by guild rank who may write, and **sync** the
-archivists' discoveries to every guild member through addon messages (no external server).
-Members' own submissions are still kept locally until the review queue arrives in M5.
+Milestones **M1–M5**: record discoveries, browse them by zone, see them on the world map,
+minimap and tooltips, set waypoints, control by guild rank who may write, **review**
+submissions, and **sync** the approved atlas to every guild member through addon messages
+(no external server).
 See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
 
 ## Install (development build)
@@ -36,6 +36,18 @@ See [docs/SPEC.md](docs/SPEC.md) for the full specification and milestone plan.
   `/fs waypoints native` or `/fs waypoints tomtom` forces one.
 
 You need to be in a guild: each guild has its own discoveries, and alts in other guilds don't see them.
+
+## How sharing works
+
+- **Archivists** (chosen by leadership, see below) keep the guild's official atlas. What they add
+  or change goes to everyone right away.
+- **Everyone else** submits: new discoveries, edits, deletions and "report outdated" go to the
+  archivists' **Review** tab. Your **My submissions** tab shows whether each one is waiting (no
+  archivist online yet: it is sent automatically when one logs in), in the queue, approved or
+  rejected with the reason.
+- After login, the addon quietly compares its copy with an online archivist and downloads only
+  what changed. You can browse your copy offline at any time. The **Sync** tab shows the state.
+- Nothing is sent outside the guild, and only archivists' data is ever accepted.
 
 ## Guild setup (leadership)
 

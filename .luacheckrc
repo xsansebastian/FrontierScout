@@ -18,6 +18,7 @@ read_globals = {
 	"C_SuperTrack",
 	"C_Texture",
 	"C_Timer",
+	"CANCEL",
 	"CanEditGuildInfo",
 	"ChatEdit_InsertLink",
 	"ChatFrameUtil",

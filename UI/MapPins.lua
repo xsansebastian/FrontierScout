@@ -28,6 +28,11 @@ function FS:EntryMenu(owner, e)
 		if self:Can("edit", e) then
 			root:CreateButton(L["Edit"], function() self:OpenEditor(e.id) end)
 		end
+		if self:Can("report", e) then
+			root:CreateButton(L["Report outdated"], function()
+				StaticPopup_Show("FRONTIERSCOUT_REPORT", e.title, nil, e.id)
+			end)
+		end
 		if self:Can("delete", e) then
 			root:CreateButton(L["Delete"], function()
 				StaticPopup_Show("FRONTIERSCOUT_DELETE", e.title, nil, e.id)

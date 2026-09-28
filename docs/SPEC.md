@@ -293,8 +293,13 @@ Proposal = {
   against the current entry and warns the archivist.
 - **Delete** produces a tombstone (`deleted=true`, rev+1). Tombstones are kept **90 days** so
   they propagate, then garbage-collected.
-- **Report outdated** increments `flags` on archivist clients and shows in the review queue.
-  An archivist resolves it with an edit, a delete, or "dismiss".
+- **Report outdated** is a proposal of its own in the review queue. An archivist fixes the entry
+  (edit / delete) and marks the report **Resolved**, or **Dismisses** it with a reason. (The
+  `flags` counter is not used.)
+- Archivists re-check a proposal when it arrives and again when approving: the sender must be the
+  proposal's author and in the roster, and the author's *current* rank must allow the action. A
+  proposal that no longer applies (entry deleted, rank lowered) is rejected with the reason.
+- Decisions are kept 30 days so offline authors and archivists catch up.
 - An archivist's own create/edit/delete is **auto-approved** (still recorded with `approvedBy`).
 
 ### 5.5 Coordinates
@@ -351,11 +356,11 @@ must **ignore unknown categories** rather than error.
 | `WANT` | WHISPER | member → archivist | `ids[]` | Request entries the member lacks or has older |
 | `ENT` | WHISPER | archivist → member | `entries[]` (≤ 20 per msg), `done` on the last | Bulk transfer, `BULK` priority |
 | `BUSY` | WHISPER | archivist → member | — | Already serving 2 members; retry another archivist or in 60–90 s |
-| `PROP` | WHISPER | contributor → each online archivist | `Proposal` | Submit |
-| `PACK` | WHISPER | archivist → contributor | `pid, status="queued"` | Ack. Contributor moves the item from `outbox` to `mine` |
+| `PROP` | WHISPER | contributor → each online archivist | `Proposal` | Submit (resent at most once a minute until acked) |
+| `PACK` | WHISPER | archivist → contributor | `pid` | Ack. Contributor removes the item from `outbox`; `mine` shows "queued" |
 | `APPR` | GUILD | archivist → all | `Entry` (single) | Live push of a newly approved revision |
-| `REJ` | WHISPER | archivist → author | `pid, reason` | Rejection notice (stored for next login if offline) |
-| `QSYNC` | WHISPER | archivist ↔ archivist | pending-queue digest + items | Keep review queues and decisions consistent |
+| `QDEC` | GUILD / WHISPER | archivist → all / author | `pid, s=approved\|rejected, r=reason, e=eid, a=author` | A decision. On GUILD it clears other archivists' queues and tells an online author; re-whispered to an author on their next `HELLO` (replaces `REJ`) |
+| `QSYNC` | WHISPER | archivist ↔ archivist | pending queue + decisions | Sent when archivists meet (`HELLO` role A / `ARCH`) |
 
 ### 6.5 Flows
 
@@ -391,8 +396,8 @@ must **ignore unknown categories** rather than error.
 - `WANT` goes in chunks of 100 ids; the archivist marks the last `ENT` of the last chunk `done`.
 - A member that finds, in a mismatched bucket, a local entry the archivist doesn't list and that is
   older than the tombstone lifetime drops it: its deletion was already garbage-collected.
-- Until M5, only archivists' writes are canonical (pushed with `APPR`); a member's allowed writes
-  stay local.
+- Only archivists' writes are canonical (pushed with `APPR`); everyone else's writes are
+  proposals (§5.4).
 
 ### 6.6 Limits & throttling
 
@@ -450,9 +455,9 @@ Tabs:
    "flagged outdated", "new since last login".
 2. **My Submissions**: my outbox + history with status (waiting / queued / approved / rejected
    + reason).
-3. **Review Queue**: *archivists only*. Proposals with diff view, map preview, approve/reject
-   (reason), bulk actions, flagged-entry list, and a warnings log for untagged high-rank serving
-   (§4.4).
+3. **Review Queue**: *archivists only*. Proposals with diff view, approve/reject (reason),
+   "Show" (the entry, or a waypoint to a proposed new spot), reports, and a warnings log for
+   untagged high-rank serving (§4.4). Bulk actions: v1.1.
 4. **Sync**: last sync time, number of entries, archivists online, root hash (debug), "Sync now".
 
 ### 7.5 Add / Edit dialog
@@ -564,7 +569,7 @@ FrontierScout/
     MapPanel.lua             -- world map side panel
     Browser.lua              -- main window + tabs
     EditDialog.lua
-    ReviewTab.lua
+    ReviewTab.lua            -- My submissions, Review queue and Sync tabs
     Tooltip.lua
     Options.lua              -- AceConfig, Guild Setup
   .pkgmeta                   -- BigWigs packager
