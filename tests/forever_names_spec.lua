@@ -67,6 +67,20 @@ describe("WoW Forever names", function()
 		for _, m in ipairs(state.sent) do assert.are_not.equal("WHISPER", m.distribution) end
 	end)
 
+	it("recognises itself in any name form, and says when a message was for someone else", function()
+		local state, FS, ns = boot()
+		for _, n in ipairs({ "Lakota Blackelk-Realm", "Lakota Blackelk", "lakota blackelk", "LakotaBlackelk-Realm", "Lakota-Realm" }) do
+			assert.is_true(FS:IsMe(n), n)
+		end
+		assert.is_false(FS:IsMe("Naal Mistrunner"))
+		assert.is_false(FS:IsMe("Lakota Blackelk-OtherRealm"))
+		FS.db.profile.debug = true
+		local text = ns.Comm.Encode({ v = 1, g = FS.guildKey, t = "TEST", to = "Naal Mistrunner-Realm" })
+		FS:OnCommReceived(ns.Comm.PREFIX, text, "GUILD", "Naal Mistrunner")
+		assert.matches("skipped TEST from Naal Mistrunner-Realm: addressed to Naal Mistrunner-Realm",
+			table.concat(state.printed, "\n"), 1, true)
+	end)
+
 	it("hides 'player not found' errors caused by its own whispers", function()
 		local state, FS, ns = boot({ { name = "Gone Away-Realm", rankIndex = 1, officerNote = "{FS:A}", online = true, guid = "Player-1234-0000000004" } })
 		state.env.ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."

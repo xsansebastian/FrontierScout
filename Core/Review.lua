@@ -19,6 +19,7 @@ Review.MAX_REASON = 200
 Review.MAX_QUEUE = 500
 Review.DECISION_TTL = 30 * 24 * 3600
 Review.RESEND_INTERVAL = 60
+Review.APPR_WAIT = 15 -- seconds an approved submission's entry may take to arrive
 
 -- Pure ---------------------------------------------------------------------------
 
@@ -399,10 +400,22 @@ FS:OnMessageType("QDEC", function(self, msg, sender)
 	if not self.store or not self:IsArchivist(sender) or type(msg.pid) ~= "string" then return end
 	if msg.s ~= "approved" and msg.s ~= "rejected" then return end
 	local reason = Format.Sanitize(msg.r or "", Review.MAX_REASON)
+	local eid = type(msg.e) == "string" and msg.e or nil
+	local own = lists(self).mine[msg.pid]
 	applyDecision(self, msg.pid, {
 		status = msg.s, by = sender, at = GetServerTime(), reason = reason ~= "" and reason or nil,
-		eid = type(msg.e) == "string" and msg.e or nil, author = name(msg.a),
+		eid = eid, author = name(msg.a),
 	})
+	-- Our approved submission: its APPR follows the QDEC. If it still hasn't
+	-- arrived a little later, fetch it from the archivist.
+	if own and msg.s == "approved" and eid and C_Timer then
+		C_Timer.After(Review.APPR_WAIT, function()
+			if self.store and not self.store:GetAny(eid) then
+				self:Debug("approved %s never arrived; pulling from %s", eid, sender)
+				self:PullFrom(sender)
+			end
+		end)
+	end
 end)
 
 -- Archivists share their queue and recent decisions with each other.

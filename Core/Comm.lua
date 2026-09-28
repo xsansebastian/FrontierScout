@@ -152,7 +152,10 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 		return
 	end
 	-- Guild messages addressed to someone else.
-	if msg.to ~= nil and not self:IsMe(msg.to) then return end
+	if msg.to ~= nil and not self:IsMe(msg.to) then
+		self:Debug("skipped %s from %s: addressed to %s", tostring(msg.t), sender, tostring(msg.to))
+		return
+	end
 	self:Debug("received %s from %s", tostring(msg.t), sender)
 	for _, handler in ipairs(handlers[msg.t] or {}) do
 		handler(self, msg, sender, distribution)

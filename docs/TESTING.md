@@ -5,7 +5,9 @@ and the UI on fake frames. They can't prove that Blizzard's API behaves as assum
 Forever. This checklist is for the beta: one guild, a few testers, about a week (SPEC §11, M6).
 
 If something about names or permissions looks wrong, `/fs whoami` prints every name the game
-reports for you and how the roster sees you: include its output in the report.
+reports for you and how the roster sees you: include its output in the report. For anything that
+doesn't arrive, include the `/fs debug` lines from both the sender and the receiver, and the
+**Data hash** from both players' **Sync** tab.
 
 Install [BugSack](https://www.curseforge.com/wow/addons/bugsack) + BugGrabber to catch Lua errors,
 and turn on `/fs debug` while testing.
@@ -15,7 +17,9 @@ and turn on `/fs debug` while testing.
 1. `/fs config` → **Guild Setup**. Pick ranks for each action, copy the tag (click it, Ctrl+A,
    Ctrl+C) and paste it on its own line in Guild & Communities → Guild Info.
    - Back in Guild Setup, **Check again** says "Guild Info has these settings".
-2. Add `{FS:A}` to one or two officers' officer notes (these are the archivists).
+2. In the same panel, tick the ranks that act as archivists (for example Guild Master and Officer)
+   before copying the tag. Only if "Also require {FS:A} in their officer note" is on, add `{FS:A}`
+   to those players' officer notes.
 3. Everyone: `/reload`, then `/fs status` shows your rank, whether you're an archivist, and
    "Guild permissions" no longer says "not set up".
 
