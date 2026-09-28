@@ -146,7 +146,7 @@ describe("Browser", function()
 		for _, r in ipairs(browser.entries.rows) do if r.data.id == a.id then row = r end end
 		row:Click()
 		assert.equals("Grizzlegut", browser.detail.title:GetText())
-		assert.matches("NPC ID: 3056", browser.detail.text:GetText(), 1, true)
+		assert.matches("NPC ID: 3056", browser.detail.view.top:GetText(), 1, true)
 		assert.is_true(browser.detail.delete.enabled)
 
 		browser.detail.delete:Click()
@@ -164,14 +164,47 @@ describe("Browser", function()
 		assert.is_false(browser.detail.delete.enabled)
 	end)
 
-	it("shows vendor stock in the detail pane", function()
+	it("shows vendor stock as clickable item rows", function()
 		local state, FS = boot()
 		local e = FS:SaveEntry(nil, { cat = "npc", sub = "vendor", title = "Jo", map = 1, x = 0.1, y = 0.1,
 			items = { { id = 5, cost = "1g" }, { id = 6 } } })
 		FS:SelectEntry(e.id)
-		local text = state.frames.FrontierScoutBrowser.detail.text:GetText()
-		assert.matches("[Item 5]  |cffaaaaaa1g|r", text, 1, true)
-		assert.matches("[Item 6]", text, 1, true)
+		local view = state.frames.FrontierScoutBrowser.detail.view
+		assert.matches("Items", view.top:GetText(), 1, true)
+		assert.matches("Added by Scout", view.bottom:GetText(), 1, true)
+		local row = view.rows[1]
+		assert.matches("[Item 5]", row.label:GetText(), 1, true)
+		assert.equals("1g", row.cost:GetText())
+		assert.matches("[Item 6]", view.rows[2].label:GetText(), 1, true)
+
+		-- Hover shows the item's tooltip.
+		local shown
+		state.env.GameTooltip.SetHyperlink = function(_, link) shown = link end
+		row.scripts.OnEnter(row)
+		assert.matches("|Hitem:5:", shown, 1, true)
+
+		-- Click works like an item link in chat (shift-click links it, etc.).
+		local ref
+		state.env.SetItemRef = function(itemString, link, button) ref = { itemString, link, button } end
+		row.scripts.OnClick(row, "LeftButton")
+		assert.equals("item:5::::::::", ref[1])
+		assert.equals("LeftButton", ref[3])
+	end)
+
+	it("caps the item rows and says how many more there are", function()
+		local state, FS = boot()
+		local items = {}
+		for i = 1, 20 do items[i] = { id = i } end
+		local e = FS:SaveEntry(nil, { cat = "npc", sub = "vendor", title = "Big", map = 1, x = 0.1, y = 0.1, items = items })
+		FS:SelectEntry(e.id)
+		local view = state.frames.FrontierScoutBrowser.detail.view
+		assert.equals(12, #view.rows)
+		assert.equals("...and 8 more", view.more:GetText())
+		assert.is_true(view.more:IsShown())
+		FS:SelectEntry(FS:SaveEntry(nil, { cat = "npc", sub = "vendor", title = "Small", map = 1, x = 0.2, y = 0.2,
+			items = { { id = 1 } } }).id)
+		assert.is_false(view.rows[2]:IsShown())
+		assert.is_false(view.more:IsShown())
 	end)
 
 	it("sets a waypoint from the detail pane", function()
