@@ -90,3 +90,61 @@ describe("WoW Forever names", function()
 		assert.matches("archivist: true", out, 1, true)
 	end)
 end)
+
+describe("Tolerant roster lookup", function()
+	local function bootLookup(opts)
+		local state, FS, ns = wow.boot({ guild = "Wardens", rank = 2, canViewNotes = opts and opts.notes,
+			guildInfo = "[FS1 s=9 ar=1]",
+			roster = { { name = "Lakota Blackelk-Realm", rankIndex = 1, officerNote = "{FS:A}", online = true, guid = "Player-1234-0000000001" } } })
+		FS:OnEnable()
+		return state, FS, ns
+	end
+
+	it("finds members whatever form their name arrives in", function()
+		local _, FS = bootLookup()
+		for _, name in ipairs({ "Lakota Blackelk-Realm", "Lakota Blackelk", "lakota blackelk-Realm", "LakotaBlackelk" }) do
+			local member, key = FS:Member(name)
+			assert.is_not_nil(member, name)
+			assert.equals("Lakota Blackelk-Realm", key)
+		end
+		assert.is_nil(FS:Member("Lakota Blackelk-OtherRealm"))
+		assert.is_nil(FS:Member("Someone Else"))
+	end)
+
+	it("accepts archivist data from a name in another form", function()
+		local _, FS, ns = bootLookup({ notes = true })
+		local text = ns.Comm.Encode({ v = 1, g = FS.guildKey, t = "APPR", e = { id = "E-1", cat = "location", sub = "cave",
+			title = "Approved", map = 1, x = 0.1, y = 0.1, rev = 1, approvedAt = 5, approvedBy = "Lakota Blackelk-Realm" } })
+		FS:OnCommReceived(ns.Comm.PREFIX, text, "GUILD", "lakota blackelk")
+		assert.equals("Approved", FS.store:Get("E-1").title)
+	end)
+
+	it("says in debug why archivist data was ignored", function()
+		local state, FS, ns = bootLookup({ notes = true })
+		FS.db.profile.debug = true
+		state.roster[1].officerNote = "raid lead" -- readable, but without the tag
+		wow.fire(state, "GUILD_ROSTER_UPDATE")
+		local text = ns.Comm.Encode({ v = 1, g = FS.guildKey, t = "APPR", e = { id = "E-1", cat = "location", sub = "cave",
+			title = "X", map = 1, x = 0.1, y = 0.1, rev = 1, approvedAt = 5 } })
+		FS:OnCommReceived(ns.Comm.PREFIX, text, "GUILD", "Lakota Blackelk")
+		local out = table.concat(state.printed, "\n")
+		assert.matches("ignored APPR from Lakota Blackelk-Realm: not an archivist for this client", out, 1, true)
+		assert.matches("{FS:A} seen: false, can read officer notes: true", out, 1, true)
+	end)
+end)
+
+describe("Officer notes that can't be read", function()
+	it("fall back to the rank gate instead of trusting nobody", function()
+		local state, FS = wow.boot({ guild = "Wardens", rank = 0, canViewNotes = true, guildInfo = "[FS1 s=9 ar=1]",
+			roster = { { name = "Lakota Blackelk-Realm", rankIndex = 1, officerNote = "", online = true, guid = "Player-1234-0000000001" } } })
+		FS:OnEnable()
+		assert.equals(0, FS.notesRead)
+		assert.is_false(FS:CanViewOfficerNotes())
+		assert.is_true(FS:IsArchivist("Lakota Blackelk-Realm"))
+		-- Once notes are readable, the tag is required again.
+		state.roster[1].officerNote = "raid lead"
+		wow.fire(state, "GUILD_ROSTER_UPDATE")
+		assert.is_true(FS:CanViewOfficerNotes())
+		assert.is_false(FS:IsArchivist("Lakota Blackelk-Realm"))
+	end)
+end)

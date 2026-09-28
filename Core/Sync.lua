@@ -50,7 +50,10 @@ local warned = {}
 -- get a warning when an untagged officer-rank player serves data (SPEC §4.4).
 local function trusted(self, sender, what)
 	if self:IsArchivist(sender) then return true end
-	local member = self.roster[sender]
+	local member = self:Member(sender)
+	self:Debug("ignored %s from %s: not an archivist for this client (in roster: %s, rank: %s, {FS:A} seen: %s, can read officer notes: %s, archivist rank: %s)",
+		what, sender, tostring(member ~= nil), tostring(member and member.rankIndex), tostring(member and member.officerNoteHasTag),
+		tostring(self:CanViewOfficerNotes()), tostring(self.acl.ar))
 	if member and self:CanViewOfficerNotes() and ns.ACL.Can(self.acl, "ar", member.rankIndex) and not warned[sender] then
 		warned[sender] = true
 		self:Warn(L["%s sent %s but has no {FS:A} officer-note tag; ignored."], Ambiguate(sender, "guild"), what)

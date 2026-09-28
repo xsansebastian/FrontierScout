@@ -192,7 +192,7 @@ end
 
 -- Is proposal `p` allowed for its author right now (SPEC §6.5)?
 function FS:ProposalAllowed(p)
-	local member = self.roster[p.author]
+	local member = self:Member(p.author)
 	if not member and p.author == self:PlayerName() then member = { rankIndex = self:MyRank() } end
 	if not member then return false, "notmember" end
 	local target = self.store:Get(p.eid)
