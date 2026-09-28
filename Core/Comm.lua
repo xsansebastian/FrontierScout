@@ -135,9 +135,9 @@ function FS:OnCommReceived(prefix, text, distribution, sender)
 	sender = Guild.FullName(sender, GetNormalizedRealmName())
 	if not sender or sender == self:PlayerName() then return end
 	-- A guild member we don't know yet: our roster is out of date.
-	if distribution == "GUILD" and not self.roster[sender] then self:RequestRoster() end
+	if distribution == "GUILD" and not self:Member(sender) then self:RequestRoster() end
 	-- Whispers only from guild members (SPEC §3.3).
-	if distribution == "WHISPER" and not self.roster[sender] then
+	if distribution == "WHISPER" and not self:Member(sender) then
 		self:Debug("ignored a whisper from %s: not in the guild roster", sender)
 		return
 	end

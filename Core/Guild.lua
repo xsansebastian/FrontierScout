@@ -61,6 +61,13 @@ function Guild.BuildRoster(rows, realm)
 	return roster
 end
 
+-- A name reduced for tolerant comparison: without our own realm, lower
+-- case, without spaces ("Lakota Blackelk-Realm" -> "lakotablackelk").
+function Guild.LooseName(name, realm)
+	if type(name) ~= "string" then return nil end
+	return (Guild.WhisperName(name, realm):lower():gsub("%s", ""))
+end
+
 -- The name to whisper: without our own realm. WoW Forever addresses players
 -- as "Name Surname" and rejects "Name Surname-Realm".
 function Guild.WhisperName(fullName, realm)
@@ -105,8 +112,12 @@ function FS:MyRank()
 	return rankIndex
 end
 
+-- May this client check officer notes for {FS:A}? Only when the game says
+-- so AND actually returned note text: a client that is allowed but gets no
+-- notes back can't check anyone, so it uses the rank gate like members do.
 function FS:CanViewOfficerNotes()
-	return C_GuildInfo and C_GuildInfo.CanViewOfficerNote and C_GuildInfo.CanViewOfficerNote() or false
+	local allowed = C_GuildInfo and C_GuildInfo.CanViewOfficerNote and C_GuildInfo.CanViewOfficerNote() or false
+	return allowed and (self.notesRead or 0) > 0
 end
 
 -- Asks the server for fresh roster data, at most every 15 seconds.
@@ -127,14 +138,18 @@ end
 function FS:UpdateRoster()
 	local rows = {}
 	local realm, myGuid = GetNormalizedRealmName(), UnitGUID("player")
+	self.notesRead = 0 -- officer notes the game gave us text for (diagnostics)
 	if IsInGuild() then
 		for i = 1, GetNumGuildMembers() or 0 do
 			local name, _, rankIndex, _, _, _, _, officerNote, online, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
+			if type(officerNote) == "string" and officerNote ~= "" then self.notesRead = self.notesRead + 1 end
 			rows[#rows + 1] = { name = name, guid = guid, rankIndex = rankIndex, officerNote = officerNote, online = online }
 			if guid and guid == myGuid then self.selfName = Guild.FullName(name, realm) end
 		end
 	end
 	self.roster = Guild.BuildRoster(rows, realm)
+	self.rosterLoose = {}
+	for full in pairs(self.roster) do self.rosterLoose[Guild.LooseName(full, realm)] = full end
 	-- Still empty (the server hasn't answered yet): ask again once the throttle allows.
 	if IsInGuild() and next(self.roster) == nil and C_Timer then
 		C_Timer.After(16, function() self:RequestRoster() end)
@@ -147,8 +162,19 @@ function FS:UpdateRoster()
 	self:SendMessage("FRONTIERSCOUT_ROSTER_UPDATED")
 end
 
+-- The roster entry for `name` and its roster key. Exact match first, then
+-- tolerant (case, spaces, our realm), because names can reach us in a
+-- slightly different form than the roster has them.
+function FS:Member(name)
+	if type(name) ~= "string" then return nil end
+	local member = self.roster[name]
+	if member then return member, name end
+	local key = self.rosterLoose and self.rosterLoose[Guild.LooseName(name, GetNormalizedRealmName())]
+	if key then return self.roster[key], key end
+end
+
 function FS:IsArchivist(fullName)
-	local member = self.roster[fullName]
+	local member = self:Member(fullName)
 	if fullName == self:PlayerName() and not member then
 		member = { rankIndex = self:MyRank() }
 	end
