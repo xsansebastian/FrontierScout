@@ -94,7 +94,7 @@ end)
 describe("Tolerant roster lookup", function()
 	local function bootLookup(opts)
 		local state, FS, ns = wow.boot({ guild = "Wardens", rank = 2, canViewNotes = opts and opts.notes,
-			guildInfo = "[FS1 s=9 ar=1]",
+			guildInfo = "[FS1 s=9 ar=1 an=1]",
 			roster = { { name = "Lakota Blackelk-Realm", rankIndex = 1, officerNote = "{FS:A}", online = true, guid = "Player-1234-0000000001" } } })
 		FS:OnEnable()
 		return state, FS, ns
@@ -135,7 +135,7 @@ end)
 
 describe("Officer notes that can't be read", function()
 	it("fall back to the rank gate instead of trusting nobody", function()
-		local state, FS = wow.boot({ guild = "Wardens", rank = 0, canViewNotes = true, guildInfo = "[FS1 s=9 ar=1]",
+		local state, FS = wow.boot({ guild = "Wardens", rank = 0, canViewNotes = true, guildInfo = "[FS1 s=9 ar=1 an=1]",
 			roster = { { name = "Lakota Blackelk-Realm", rankIndex = 1, officerNote = "", online = true, guid = "Player-1234-0000000001" } } })
 		FS:OnEnable()
 		assert.equals(0, FS.notesRead)

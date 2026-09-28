@@ -73,14 +73,15 @@ describe("Guild Setup options", function()
 		assert.equals("Initiate and above", args.s.values()[3])
 		assert.equals("Everyone", args.r.values()[9])
 		args.s.set(nil, 3)
-		args.ar.set(nil, 1)
-		assert.equals("[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1]", args.tag.get())
+		args.archivistRanks.set(nil, 1, true)
+		assert.is_true(args.archivistRanks.get(nil, 1))
+		assert.equals("[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1 am=3]", args.tag.get())
 		args.tag.set(nil, "typed over") -- read-only
-		assert.equals("[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1]", args.tag.get())
+		assert.equals("[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1 am=3]", args.tag.get())
 		assert.matches("doesn't have the tag yet", args.status.name(), 1, true)
 
 		-- The Guild Master pastes it into Guild Info in the game's own UI.
-		state.guildInfo = "Raid nights: Tue\n[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1]"
+		state.guildInfo = "Raid nights: Tue\n[FS1 s=3 eo=0 ea=0 do=0 da=0 r=9 ar=1 am=3]"
 		args.recheck.func()
 		assert.matches("has these settings", args.status.name(), 1, true)
 		assert.is_true(FS.aclConfigured)
@@ -119,7 +120,7 @@ end)
 describe("Guild Setup hint for leadership", function()
 	it("tells a qualifying leader without the tag that they aren't an archivist", function()
 		local state = wow.boot({ guild = "Wardens", ui = true, rank = 0, canViewNotes = true,
-			guildInfo = "[FS1 s=9 ar=1]",
+			guildInfo = "[FS1 s=9 ar=1 an=1]",
 			roster = { { name = "Scout-Realm", rankIndex = 0, officerNote = "guild master", online = true, guid = "Player-1234-0ABCDEF0" } } })
 		state.ns.FS:OnEnable()
 		local text = state.options.FrontierScout().args.guild.args.archivists.name()

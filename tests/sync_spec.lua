@@ -178,7 +178,7 @@ describe("Delivery without working whispers", function()
 
 	it("a submission reaches the archivist even when the member knows no archivist", function()
 		local net = Net.new({ { name = "Arch", rank = 1, archivist = true }, { name = "Gm", rank = 0 } },
-			{ guildInfo = "[FS1 s=9 eo=9 ea=1 do=9 da=1 r=2 ar=1]" })
+			{ guildInfo = "[FS1 s=9 eo=9 ea=1 do=9 da=1 r=2 ar=1 an=1]" })
 		noWhispers(net)
 		local arch, gm = net:Client("Arch"), net:Client("Gm")
 		gm.state.roster[1].online = false -- the GM's client thinks no archivist is online

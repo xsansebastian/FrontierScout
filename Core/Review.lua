@@ -326,7 +326,11 @@ local function enqueue(self, raw, from)
 end
 
 FS:OnMessageType("PROP", function(self, msg, sender)
-	if not self.store or not self:AmArchivist() then return end
+	if not self.store then return end
+	if not self:AmArchivist() then
+		self:Debug("not queueing a proposal from %s: not an archivist here (%s)", sender, self:ArchivistStatus())
+		return
+	end
 	local ok, decision = enqueue(self, msg.p, sender)
 	if not ok then
 		self:Debug("dropped a proposal from %s (invalid, not allowed, or queue full)", sender)

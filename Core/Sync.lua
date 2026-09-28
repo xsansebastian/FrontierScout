@@ -54,7 +54,7 @@ local function trusted(self, sender, what)
 	self:Debug("ignored %s from %s: not an archivist for this client (in roster: %s, rank: %s, {FS:A} seen: %s, can read officer notes: %s, archivist rank: %s)",
 		what, sender, tostring(member ~= nil), tostring(member and member.rankIndex), tostring(member and member.officerNoteHasTag),
 		tostring(self:CanViewOfficerNotes()), tostring(self.acl.ar))
-	if member and self:CanViewOfficerNotes() and ns.ACL.Can(self.acl, "ar", member.rankIndex) and not warned[sender] then
+	if member and self:CanViewOfficerNotes() and ns.ACL.IsArchivistRank(self.acl, member.rankIndex) and not warned[sender] then
 		warned[sender] = true
 		self:Warn(L["%s sent %s but has no {FS:A} officer-note tag; ignored."], Ambiguate(sender, "guild"), what)
 	end
@@ -136,7 +136,11 @@ end
 -- Handlers ---------------------------------------------------------------------------
 
 FS:OnMessageType("HELLO", function(self, msg, sender)
-	if not self.store or not self:AmArchivist() then return end
+	if not self.store then return end
+	if not self:AmArchivist() then
+		self:Debug("not answering HELLO from %s: not an archivist here (%s)", sender, self:ArchivistStatus())
+		return
+	end
 	beacon(self, "WHISPER", sender)
 	-- Another archivist with different data: pull theirs too, so we converge.
 	if msg.role == "A" and msg.root ~= digest(self):Root() and self:IsArchivist(sender) then

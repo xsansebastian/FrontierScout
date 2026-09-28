@@ -70,8 +70,11 @@ Until a guild is set up, only the Guild Master can write. In `/fs config` → **
    keep the rest of the text. The game doesn't let addons edit Guild Info, so this step is manual.
    Click **Check again**: the page confirms when Guild Info has the settings. Every member's addon
    reads the tag from there within a minute, so nobody can fake it.
-3. Make archivists by adding `{FS:A}` to their **officer note**. Archivists will approve
-   discoveries and share them with the guild once sync arrives.
+3. **Archivists** (who approve discoveries and share them with the guild) are chosen by rank:
+   tick the ranks under "Archivists: ranks that approve discoveries" (for example Guild Master and
+   Officer). Every online or offline member of those ranks is listed on the page. For a stricter
+   setup, tick "Also require {FS:A} in their officer note" and add `{FS:A}` to the officer notes of
+   the chosen archivists.
 
 Libraries are already included in `Libs/`; nothing else to install.
 

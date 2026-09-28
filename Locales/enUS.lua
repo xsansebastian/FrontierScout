@@ -166,7 +166,6 @@ L["Edit anyone's discoveries"] = true
 L["Delete their own discoveries"] = true
 L["Delete anyone's discoveries"] = true
 L["Report outdated discoveries"] = true
-L["Archivists: minimum rank"] = true
 L["%s and above"] = true
 L["Everyone"] = true
 L["Current settings come from the guild's Guild Info."] = true
@@ -290,3 +289,13 @@ L["show how the game names you (for bug reports)"] = true
 
 -- Guild Setup (own tag)
 L["You are not an archivist: your rank qualifies, but your own officer note needs {FS:A}. Until then your discoveries go to the archivists for review."] = true
+
+-- Guild Setup (archivists by rank)
+L["Also require {FS:A} in their officer note"] = true
+L["Off: everyone in the archivist ranks is an archivist. On: they also need {FS:A} in their officer note."] = true
+L["offline"] = true
+
+-- Guild Setup (archivist ranks)
+L["Archivists: ranks that approve discoveries"] = true
+L["Archivists approve discoveries and share them with the guild. They need an archivist rank above and {FS:A} in their officer note (Guild & Communities > Roster)."] = true
+L["Archivists approve discoveries and share them with the guild: everyone in the archivist ranks above."] = true

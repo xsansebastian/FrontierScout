@@ -5,9 +5,16 @@ local _, ns = ...
 local ACL = {}
 ns.ACL = ACL
 
--- Action keys in tag order. "do" is a Lua keyword, so always index with ["do"].
-ACL.KEYS = { "s", "eo", "ea", "do", "da", "r", "ar" }
-ACL.DEFAULTS = { s = 0, eo = 0, ea = 0, ["do"] = 0, da = 0, r = 9, ar = 0 }
+-- Rank thresholds in tag order. "do" is a Lua keyword, so always index with ["do"].
+ACL.RANK_KEYS = { "s", "eo", "ea", "do", "da", "r" } -- chosen as "this rank and above"
+-- All tag keys: the thresholds plus
+--   an  1 = archivists also need {FS:A} in their officer note (0 = rank is enough)
+--   am  archivist ranks as a bitmask (bit i = rank i); overrides `ar`, which
+--       older clients still read (set to the lowest selected rank)
+ACL.KEYS = { "s", "eo", "ea", "do", "da", "r", "ar", "an", "am" }
+ACL.DEFAULTS = { s = 0, eo = 0, ea = 0, ["do"] = 0, da = 0, r = 9, ar = 0, an = 0 }
+local MAX_VALUE = { an = 1, am = 1023 } -- other keys are ranks, 0..9
+local OPTIONAL = { an = 0 } -- left out of the tag when at this value
 ACL.NOTE_TAG = "{FS:A}"
 ACL.MAX_INFO = 500 -- Guild Info text length (SPEC §12 q6)
 
@@ -27,7 +34,7 @@ function ACL.Parse(text)
 	if not body then return t, false end
 	for key, value in body:gmatch("(%a+)=(%d+)") do
 		value = tonumber(value)
-		if ACL.DEFAULTS[key] and value <= 9 then t[key] = value end
+		if (ACL.DEFAULTS[key] or key == "am") and value <= (MAX_VALUE[key] or 9) then t[key] = value end
 	end
 	return t, true
 end
@@ -35,9 +42,39 @@ end
 function ACL.Format(t)
 	local parts = { "[FS1" }
 	for _, key in ipairs(ACL.KEYS) do
-		parts[#parts + 1] = ("%s=%d"):format(key, t[key] or ACL.DEFAULTS[key])
+		local value = t[key] or ACL.DEFAULTS[key]
+		if value ~= nil and value ~= OPTIONAL[key] then
+			parts[#parts + 1] = ("%s=%d"):format(key, value)
+		end
 	end
 	return table.concat(parts, " ") .. "]"
+end
+
+local function hasBit(mask, bit)
+	return math.floor(mask / 2 ^ bit) % 2 == 1
+end
+
+-- Is rank `rankIndex` one of the archivist ranks?
+function ACL.IsArchivistRank(t, rankIndex)
+	if rankIndex == nil then return false end
+	if t.am then return rankIndex >= 0 and rankIndex <= 9 and hasBit(t.am, rankIndex) end
+	return ACL.Can(t, "ar", rankIndex)
+end
+
+-- Selects or unselects archivist rank `rankIndex` in `t` (starting from `ar`
+-- when there is no selection yet), keeping `ar` as the lowest selected rank.
+function ACL.SetArchivistRank(t, rankIndex, on)
+	local mask = t.am
+	if not mask then
+		mask = 0
+		for i = 0, t.ar or 0 do mask = mask + 2 ^ i end
+	end
+	if on and not hasBit(mask, rankIndex) then mask = mask + 2 ^ rankIndex end
+	if not on and hasBit(mask, rankIndex) then mask = mask - 2 ^ rankIndex end
+	t.am = mask
+	local lowest = 0
+	for i = 0, 9 do if hasBit(mask, i) then lowest = i end end
+	t.ar = lowest
 end
 
 -- Compares Guild Info text with the thresholds `t` someone wants. Addons may
@@ -54,7 +91,7 @@ function ACL.SetupStatus(text, t)
 	if current then
 		local parsed = ACL.Parse(current)
 		for _, key in ipairs(ACL.KEYS) do
-			if parsed[key] ~= (t[key] or ACL.DEFAULTS[key]) then return "differs", current end
+			if (parsed[key] or ACL.DEFAULTS[key]) ~= (t[key] or ACL.DEFAULTS[key]) then return "differs", current end
 		end
 		return "applied"
 	end
@@ -94,8 +131,10 @@ end
 
 -- SPEC §4.4: rank gate for everyone; officer-note tag too when the viewer
 -- can read officer notes. `member` = { rankIndex, officerNoteHasTag }.
+-- SPEC §4.4: everyone at or above the archivist rank. With `an=1` the
+-- officer-note tag is required too, checked by viewers who can read notes.
 function ACL.IsArchivist(t, member, viewerSeesNotes)
-	if not member or not ACL.Can(t, "ar", member.rankIndex) then return false end
-	if viewerSeesNotes then return member.officerNoteHasTag == true end
+	if not member or not ACL.IsArchivistRank(t, member.rankIndex) then return false end
+	if t.an == 1 and viewerSeesNotes then return member.officerNoteHasTag == true end
 	return true
 end

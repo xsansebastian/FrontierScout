@@ -10,14 +10,14 @@ describe("ACL tag", function()
 	it("defaults to Guild-Master-only writes without a tag", function()
 		local t, found = ACL.Parse("Welcome to the guild!")
 		assert.is_false(found)
-		assert.same({ s = 0, eo = 0, ea = 0, ["do"] = 0, da = 0, r = 9, ar = 0 }, t)
+		assert.same({ s = 0, eo = 0, ea = 0, ["do"] = 0, da = 0, r = 9, ar = 0, an = 0 }, t)
 		assert.is_false(select(2, ACL.Parse(nil)))
 	end)
 
 	it("parses the tag anywhere in Guild Info", function()
 		local t, found = ACL.Parse("Raids Tue/Thu\n[FS1 s=5 eo=5 ea=1 do=5 da=1 r=9 ar=1]\nBe nice")
 		assert.is_true(found)
-		assert.same({ s = 5, eo = 5, ea = 1, ["do"] = 5, da = 1, r = 9, ar = 1 }, t)
+		assert.same({ s = 5, eo = 5, ea = 1, ["do"] = 5, da = 1, r = 9, ar = 1, an = 0 }, t)
 	end)
 
 	it("keeps defaults for missing, unknown or out-of-range keys", function()
@@ -73,7 +73,15 @@ describe("ACL checks", function()
 		assert.is_true(ACL.CanPropose(loose, "edit", 3, true))
 	end)
 
-	it("verifies archivists by rank, and by officer note for officers", function()
+	it("makes the archivist rank enough by default", function()
+		local untagged = { rankIndex = 1, officerNoteHasTag = false }
+		assert.is_true(ACL.IsArchivist(t, untagged, true))
+		assert.is_true(ACL.IsArchivist(t, untagged, false))
+		assert.is_false(ACL.IsArchivist(t, { rankIndex = 2 }, false))
+	end)
+
+	it("with an=1, also checks the officer note for viewers who can read it", function()
+		t.an = 1
 		local tagged = { rankIndex = 1, officerNoteHasTag = true }
 		local untagged = { rankIndex = 1, officerNoteHasTag = false }
 		local member = { rankIndex = 2, officerNoteHasTag = true }
@@ -84,6 +92,24 @@ describe("ACL checks", function()
 		assert.is_false(ACL.IsArchivist(t, nil, false))
 		assert.is_true(ACL.NoteHasTag("alt of Bob {FS:A}"))
 		assert.is_false(ACL.NoteHasTag("{FS:B}"))
+	end)
+
+	it("lets archivist ranks be chosen one by one", function()
+		local u = ACL.Parse("[FS1 ar=1]")
+		assert.is_true(ACL.IsArchivistRank(u, 0))
+		ACL.SetArchivistRank(u, 0, false) -- officers only, not the Guild Master
+		ACL.SetArchivistRank(u, 3, true)  -- plus rank 3
+		assert.is_false(ACL.IsArchivistRank(u, 0))
+		assert.is_true(ACL.IsArchivistRank(u, 1))
+		assert.is_false(ACL.IsArchivistRank(u, 2))
+		assert.is_true(ACL.IsArchivistRank(u, 3))
+		assert.equals(3, u.ar) -- older clients: the lowest selected rank
+		local tag = ACL.Format(u)
+		assert.equals("[FS1 s=0 eo=0 ea=0 do=0 da=0 r=9 ar=3 am=10]", tag)
+		local back = ACL.Parse(tag)
+		assert.is_false(ACL.IsArchivistRank(back, 0))
+		assert.is_true(ACL.IsArchivistRank(back, 3))
+		assert.equals("applied", ACL.SetupStatus(tag, u))
 	end)
 end)
 
@@ -100,7 +126,7 @@ describe("A 3-rank test guild", function()
 
 	local function as(rank, opts)
 		opts = opts or {}
-		local state, FS = wow.boot({ guild = "Wardens", rank = rank, roster = ROSTER, guildInfo = TAG,
+		local state, FS = wow.boot({ guild = "Wardens", rank = rank, roster = ROSTER, guildInfo = opts.tag or TAG,
 			canViewNotes = opts.notes })
 		FS:OnEnable()
 		return state, FS
@@ -152,10 +178,16 @@ describe("A 3-rank test guild", function()
 		assert.matches("Your guild rank can't do that", table.concat(state.printed, "\n"), 1, true)
 	end)
 
-	it("sees archivists by rank, or by officer note when allowed to read notes", function()
-		local _, member = as(2)
-		assert.same({ "Boss-Realm", "Otto-Realm", "Olga-Realm" }, member:ListArchivists())
+	it("sees archivists by rank", function()
 		local _, officer = as(1, { notes = true })
+		assert.same({ "Boss-Realm", "Otto-Realm", "Olga-Realm" }, officer:ListArchivists())
+	end)
+
+	it("with an=1, officers also check the officer note", function()
+		local tag = TAG:gsub("%]$", " an=1]")
+		local _, member = as(2, { tag = tag })
+		assert.same({ "Boss-Realm", "Otto-Realm", "Olga-Realm" }, member:ListArchivists())
+		local _, officer = as(1, { notes = true, tag = tag })
 		assert.same({ "Boss-Realm", "Olga-Realm" }, officer:ListArchivists())
 		assert.is_false(officer:IsArchivist("Scout-Realm")) -- tagged but rank too low
 	end)
@@ -198,5 +230,42 @@ describe("Guild roster helpers", function()
 		state.time = 1016
 		FS:RequestRoster()
 		assert.equals(2, state.rosterRequests)
+	end)
+end)
+
+describe("Guild Info arriving late", function()
+	local TAG = "[FS1 s=9 eo=9 ea=1 do=9 da=1 r=2 ar=1]"
+	local ROSTER = { { name = "Scout-Realm", rankIndex = 1, officerNote = "", online = true, guid = "Player-1234-0ABCDEF0" } }
+
+	it("re-reads Guild Info when its text shows up later", function()
+		local state, FS = wow.boot({ guild = "Wardens", rank = 1, roster = ROSTER, guildInfo = "" })
+		FS:OnEnable()
+		assert.is_false(FS:AmArchivist()) -- defaults: only rank 0
+		state.guildInfo = TAG -- no event for this; the next check reads it
+		assert.is_true(FS:AmArchivist())
+		assert.is_true(FS.aclConfigured)
+	end)
+
+	it("keeps the last known tag across a reload while Guild Info is still empty", function()
+		local state, FS = wow.boot({ guild = "Wardens", rank = 1, roster = ROSTER, guildInfo = TAG })
+		FS:OnEnable()
+		assert.is_true(FS:AmArchivist())
+		-- /reload: same saved data, Guild Info not loaded yet.
+		local state2, FS2 = wow.boot({ guild = "Wardens", rank = 1, roster = ROSTER, guildInfo = "",
+			saved = state.env.FrontierScoutDB })
+		FS2:OnEnable()
+		assert.is_true(FS2:AmArchivist())
+		assert.equals(1, FS2.acl.ar)
+		local _ = state2
+	end)
+
+	it("says in debug why a HELLO isn't answered", function()
+		local state, FS, ns = wow.boot({ guild = "Wardens", rank = 2, guildInfo = TAG,
+			roster = { { name = "Scout-Realm", rankIndex = 2, officerNote = "", online = true, guid = "Player-1234-0ABCDEF0" } } })
+		FS:OnEnable()
+		FS.db.profile.debug = true
+		FS:OnCommReceived(ns.Comm.PREFIX, ns.Comm.Encode({ v = 1, g = FS.guildKey, t = "HELLO", role = "M" }), "GUILD", "Someone")
+		assert.matches("not answering HELLO from Someone-Realm: not an archivist here (rank 2, archivist rank 1",
+			table.concat(state.printed, "\n"), 1, true)
 	end)
 end)

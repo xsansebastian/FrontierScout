@@ -183,7 +183,19 @@ writable only by ranks with "Edit Guild Info" (`CanEditGuildInfo()`).
 `{FS:A}` (6 chars; officer notes allow 31). Only ranks with "Edit Officer Note" can set it,
 and only ranks with "View Officer Note" (`C_GuildInfo.CanViewOfficerNote()`) can read it.
 
-### 4.4 Archivist verification (hybrid "officer note + rank gate")
+### 4.4 Archivist verification
+
+**Changed after the first beta tests:** archivists are chosen **by rank** by default: every member
+of a selected archivist rank is an archivist. The tag keeps `ar` (lowest archivist rank, for older
+clients) and adds `am` (bitmask of the selected ranks, bit *i* = rank *i*; overrides `ar`). The
+officer-note check below is opt-in with `an=1` ("Also require {FS:A} in their officer note"). A
+client that may read officer notes but receives no note text uses the rank check.
+
+The permission tag is re-read from Guild Info whenever permissions are checked, and the last known
+tag is saved per guild: Guild Info text can arrive after the roster at login, and falling back to the
+defaults would briefly demote every archivist below rank 0.
+
+Original hybrid design (now the `an=1` behaviour):
 
 A client decides whether player **P** is an archivist as follows:
 
