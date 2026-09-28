@@ -56,14 +56,17 @@ telling guildmates about. Discoveries are:
 | AceSerializer-3.0 | Table serialization |
 | LibDeflate | Compression + addon-channel-safe encoding |
 | HereBeDragons-2.0, HereBeDragons-Pins-2.0 | World map and minimap pins, coordinate translation |
-| LibDataBroker-1.1, LibDBIcon-1.0 | Minimap / broker launcher. *Not vendored yet: decide in M1 between these and the native Addon Compartment.* |
-| AceConfig-3.0, AceConfigDialog-3.0, AceGUI-3.0 | Options panel only |
+| AceConfig-3.0, AceConfigDialog-3.0, AceGUI-3.0 | Options panel and the add/edit form |
 
 Libraries are **vendored** in `Libs/` from pinned upstream revisions by `scripts/update-libs.sh`
 (see `Libs/README.md`), so the repository folder can be dropped into `Interface/AddOns` as-is.
 
 The browser window and map side panel use native frames (`ScrollBox` + `DataProvider`) for
 performance.
+
+**Launcher (decided in M1):** the native **Addon Compartment** (`## AddonCompartmentFunc` in the
+TOC) plus key bindings (`Bindings.xml`), so no LibDataBroker / LibDBIcon. A standalone minimap
+button can be added in M6 if beta testers ask for one.
 
 ---
 
@@ -202,7 +205,9 @@ end
 ### 4.5 Roster cache
 
 - Built from `GetGuildRosterInfo(i)` on `GUILD_ROSTER_UPDATE`. Refreshes are requested with
-  `C_GuildInfo.GuildRoster()`, at most once per 15 s (Blizzard throttle).
+  `C_GuildInfo.GuildRoster()`, at most once per 15 s (Blizzard throttle), and every 60 s in the
+  background; the Guild Info tag is re-read on each roster update.
+- A rank's own/any rights combine: someone allowed to edit *any* entry may edit their own too.
 - Stores `fullName (Name-Realm) → { rankIndex, officerNoteHasTag, online }`.
 - All ACL and archivist checks go through the cache and use **current** rank at receive time.
 - Names are always normalized to `Name-Realm` (`Ambiguate` only for display).
@@ -295,8 +300,9 @@ Proposal = {
 ### 5.5 Coordinates
 
 - Captured with `C_Map.GetBestMapForUnit("player")` + `C_Map.GetPlayerMapPosition(map, "player")`.
-- Map-click capture: right-click on the world map canvas → "Add discovery here" uses
-  `WorldMapFrame:GetNormalizedCursorPosition()` and the displayed map ID.
+- Map-click capture: **Ctrl + right-click** on the world map canvas (plain right-click already
+  zooms out) opens the dialog at `ScrollContainer:GetNormalizedCursorPosition()` on the
+  displayed map ID.
 - HereBeDragons translates coordinates between parent and child maps for display.
 
 ### 5.6 Forward compatibility (routes, v2)
@@ -339,11 +345,12 @@ must **ignore unknown categories** rather than error.
 | Type | Channel | From → To | Payload | Purpose |
 |---|---|---|---|---|
 | `HELLO` | GUILD | any → all | `root, count, role` | Announce presence after login (15–45 s random delay) |
-| `ARCH` | GUILD | archivist → all | `root, count` | Answer to `HELLO` / periodic beacon (≤ 1 per 10 min) |
+| `ARCH` | WHISPER / GUILD | archivist → member / all | `root, count` | Answer to `HELLO` by whisper; periodic beacon on GUILD (every 10 min) |
 | `SYNCREQ` | WHISPER | member → archivist | `buckets[64]` | Ask for diff when root differs |
 | `MANIFEST` | WHISPER | archivist → member | `{ [bucket] = { id=rev:approvedAt, ... } }` | Details for mismatched buckets only |
 | `WANT` | WHISPER | member → archivist | `ids[]` | Request entries the member lacks or has older |
-| `ENT` | WHISPER | archivist → member | `entries[]` (≤ 20 per msg) | Bulk transfer, `BULK` priority |
+| `ENT` | WHISPER | archivist → member | `entries[]` (≤ 20 per msg), `done` on the last | Bulk transfer, `BULK` priority |
+| `BUSY` | WHISPER | archivist → member | — | Already serving 2 members; retry another archivist or in 60–90 s |
 | `PROP` | WHISPER | contributor → each online archivist | `Proposal` | Submit |
 | `PACK` | WHISPER | archivist → contributor | `pid, status="queued"` | Ack. Contributor moves the item from `outbox` to `mine` |
 | `APPR` | GUILD | archivist → all | `Entry` (single) | Live push of a newly approved revision |
@@ -376,14 +383,30 @@ must **ignore unknown categories** rather than error.
    apply it. The proposal is marked decided in `QSYNC`, so other archivists drop it from their queues.
 3. Reject → `REJ` to the author (or held until the author's next `HELLO`).
 
+**Implementation notes (M4)**
+
+- An archivist answers a `HELLO` with a whispered `ARCH`, so a login doesn't make every archivist
+  talk on the guild channel. A `HELLO` with `role=A` from another archivist whose root differs
+  makes the receiver pull from it too, so archivists converge in both directions.
+- `WANT` goes in chunks of 100 ids; the archivist marks the last `ENT` of the last chunk `done`.
+- A member that finds, in a mismatched bucket, a local entry the archivist doesn't list and that is
+  older than the tombstone lifetime drops it: its deletion was already garbage-collected.
+- Until M5, only archivists' writes are canonical (pushed with `APPR`); a member's allowed writes
+  stay local.
+
 ### 6.6 Limits & throttling
 
 - ChatThrottleLib via AceComm: `ALERT` priority for control messages, `BULK` for `ENT`.
 - Maximum outgoing `ENT` bandwidth per archivist: ~1 KB/s. At most **2 concurrent member syncs**
   per archivist; others are told to retry later (`BUSY`).
-- Receive-side rate limit: messages from a single sender beyond 30/min are dropped (anti-spam).
-- Sync is **paused** in combat / instances and resumes on `PLAYER_REGEN_ENABLED` /
-  `ZONE_CHANGED_NEW_AREA`.
+- Receive-side rate limit: messages from a single sender beyond 30/min are dropped (anti-spam),
+  checked before decoding. The archivist a client is currently pulling from is exempt.
+- Received messages are capped at 256 KB encoded / 1 MB decompressed and decoded in `pcall`.
+- Sync is **paused** in combat / instances: outgoing messages are queued (up to 100) and sent on
+  `PLAYER_REGEN_ENABLED` / `ZONE_CHANGED_NEW_AREA`, after which the client pulls again if an
+  archivist's root differs.
+- AceComm sends through ChatThrottleLib, which doesn't surface `Enum.SendAddonMessageResult`;
+  lost messages are covered by timeouts (120 s per session) and the next `HELLO` / beacon.
 - Hard caps: 5,000 entries per guild. Oversized fields are truncated on receipt.
 
 ---
@@ -397,13 +420,15 @@ must **ignore unknown categories** rather than error.
 - Hover: tooltip with title, subtype, description excerpt, author, "approved by", respawn/schedule.
 - Click: opens the entry in the side panel. Shift-click: set waypoint. Right-click: context
   menu (Waypoint, Edit, Delete, Report outdated).
-- Filter dropdown added to the world map's tracking/filter button area: toggle categories and
-  subtypes.
+- Category toggles live in the side panel header (§7.3) and in Options; they filter both the
+  pins and the panel list. Subtype filters: v1.1.
+- Only the shown continent's entries get pin frames (rebuilt when the continent or the data
+  changes), so thousands of entries don't mean thousands of frames.
 
 ### 7.2 Minimap pins
 
-- HereBeDragons-Pins `AddMinimapIconMap`, same icons at smaller size, optional edge-clamp for
-  nearby entries (configurable radius).
+- HereBeDragons-Pins `AddMinimapIconMap`, same icons at smaller size, for the player's zone only
+  (rebuilt on `ZONE_CHANGED_NEW_AREA`). Optional "keep on the minimap edge" for distant pins.
 - Per-category toggle, separate from the world map filters.
 
 ### 7.3 Map side panel
@@ -432,8 +457,11 @@ Tabs:
 
 ### 7.5 Add / Edit dialog
 
-- Entry points: browser "New", map right-click "Add discovery here", `/fs add`, and a
-  **"Scout this"** button in target / merchant context (only for NPC / vendor subtypes).
+- Entry points: browser "New", map right-click "Add discovery here" (M2), `/fs add` and its key
+  binding (uses the current target when there is one), and a **Scout** button on the merchant
+  window (vendor + stock).
+- Item links: shift-click an item while the description or items field has focus. Items are one
+  per line, `<item link or ID> = <cost>`.
 - Pre-fill: position, zone, target npcID/name, vendor stock, item link from cursor.
 - Fields adapt to the category. Validation: title required, length limits.
 - Buttons are disabled with a tooltip explaining the ACL when the player lacks the right.
@@ -447,9 +475,10 @@ Tabs:
 
 ### 7.7 Launcher & commands
 
-- LibDBIcon minimap button + LDB launcher (left-click: browser, right-click: options).
-- `/fs` browser, `/fs add` new at player position, `/fs sync` force sync, `/fs config` options,
-  `/fs debug` toggle debug log.
+- Addon Compartment entry (opens the browser) and two key bindings: toggle the browser, record a
+  discovery here.
+- `/fs` browser, `/fs add [title]` new at player position, `/fs waypoints auto|native|tomtom`,
+  `/fs sync` force sync (M4), `/fs config` options (M3), `/fs debug` toggle debug log.
 
 ### 7.8 Options
 
@@ -511,13 +540,17 @@ trust anchors cover the realistic threats.
 FrontierScout/
   FrontierScout.toc
   embeds.xml
+  Bindings.xml               -- key bindings (browser, record a discovery)
   Libs/                      -- vendored libraries (§2.1), see Libs/README.md
   Locales/enUS.lua           -- AceLocale-ready (esES etc. later)
   Core/
     Init.lua                 -- AceAddon, DB defaults, slash commands
+    Categories.lua           -- categories, subtypes, labels (§5.2)
+    Format.lua               -- text sanitizing, coordinates, money, item/tag lists
     Guild.lua                -- guildKey, roster cache, events
     ACL.lua                  -- Guild Info tag parse/write, rank checks, archivist check
     Store.lua                -- entries, proposals, tombstones, GC, validation
+    Query.lua                -- search, filters, Continent -> Zone grouping
     Digest.lua               -- FNV-1a, 64-bucket digest
     Comm.lua                 -- envelope, send/recv, rate limit, pause rules
     Sync.lua                 -- HELLO/ARCH/SYNCREQ/MANIFEST/WANT/ENT
@@ -526,6 +559,7 @@ FrontierScout/
     Waypoint.lua             -- TomTom / native
   UI/
     Icons.lua
+    Widgets.lua              -- list rows, buttons, detail text shared by browser and panel
     MapPins.lua              -- world map + minimap pins (HBD)
     MapPanel.lua             -- world map side panel
     Browser.lua              -- main window + tabs
@@ -536,7 +570,8 @@ FrontierScout/
   .pkgmeta                   -- BigWigs packager
   scripts/update-libs.sh     -- re-vendors Libs/ from pinned revisions
   .luacheckrc
-  tests/                     -- busted specs for pure-Lua modules (ACL, Digest, Store, Sync state machine)
+  tests/                     -- busted specs: pure modules, WoW-facing modules on API stubs,
+                             -- UI smoke tests on fake frames (tests/helpers/)
 ```
 
 Pure logic (ACL parsing, digest, store, conflict resolution, sync state machine) is kept free of
@@ -549,10 +584,10 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
 | # | Milestone | Scope | Exit criteria |
 |---|---|---|---|
 | M0 | Scaffold | TOC, libs, DB, slash cmd, luacheck/busted CI | Loads on Forever beta with no Lua errors |
-| M1 | Local atlas | Store, capture, edit dialog, browser (Discoveries tab), waypoints | Can create, browse and waypoint local entries |
-| M2 | Map surfaces | World map pins, minimap pins, side panel, tooltips, filters | Entries visible on all four surfaces |
-| M3 | Guild & ACL | guildKey isolation, roster cache, Guild Info tag, officer-note archivists, Guild Setup UI | ACL correctly gates UI in a 3-rank test guild |
-| M4 | Sync | Digest, HELLO/ARCH, SYNCREQ…ENT, APPR live push | Two clients converge from empty and after divergent edits |
+| M1 | Local atlas | Store, capture, edit dialog, browser (Discoveries tab), waypoints | Can create, browse and waypoint local entries. *Until M5, every write goes straight into the local canonical set, approved by its writer.* |
+| M2 | Map surfaces | World map pins, minimap pins, side panel, tooltips, filters, display options | Entries visible on all four surfaces |
+| M3 | Guild & ACL | guildKey isolation, roster cache, Guild Info tag, officer-note archivists, Guild Setup UI | ACL correctly gates UI in a 3-rank test guild. *Until M5, allowed writes still apply locally.* |
+| M4 | Sync | Digest, HELLO/ARCH, SYNCREQ…ENT, APPR live push | Two clients converge from empty and after divergent edits (`tests/sync_spec.lua`, over a simulated guild network with the real AceSerializer + LibDeflate) |
 | M5 | Curation | Proposals, outbox, review queue, QSYNC, reports, tombstones | End-to-end submit → approve → all members see it |
 | M6 | Polish | Notifications, localization scaffold (esES), perf pass (5k entries), docs | Beta testers in one guild for a week without data loss |
 
@@ -568,4 +603,10 @@ WoW API calls so it can be unit-tested with **busted** outside the game. CI runs
    `SendAddonMessage`, and what the throttle budgets are.
 4. Whether `C_Map.CanSetUserWaypointOnMap` is true for all Forever zones.
 5. Which Blizzard atlas icons exist for categories (fall back to bundled TGAs if needed).
-6. Guild Info text length limit on Forever, to confirm there's room for the tag.
+6. Guild Info text length limit on Forever, to confirm there's room for the tag. The addon assumes
+   500 characters (`ACL.MAX_INFO`) and refuses to write a tag that would exceed it.
+7. Merchant window API on Forever: `C_MerchantFrame.GetItemInfo` vs. the older
+   `GetMerchantItemInfo` (both handled), and whether the **Scout** button at the top right of
+   `MerchantFrame` overlaps anything.
+8. Shift-click link insertion: which of `ChatFrameUtil.InsertLink` / `ChatEdit_InsertLink` the
+   client calls (the dialog hooks whichever exists).

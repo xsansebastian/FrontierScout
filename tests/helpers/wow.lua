@@ -38,6 +38,20 @@ local function newAceDB(env)
 	}
 end
 
+-- The real AceSerializer and LibDeflate (pure Lua), loaded once.
+local realLibs
+local function loadRealLibs()
+	if realLibs then return realLibs end
+	local env = setmetatable({}, { __index = _G })
+	for _, path in ipairs({ "Libs/LibStub/LibStub.lua", "Libs/AceSerializer-3.0/AceSerializer-3.0.lua", "Libs/LibDeflate/LibDeflate.lua" }) do
+		local chunk = assert(loadfile(path))
+		setfenv(chunk, env)
+		chunk()
+	end
+	realLibs = { ["AceSerializer-3.0"] = env.LibStub("AceSerializer-3.0"), LibDeflate = env.LibStub("LibDeflate") }
+	return realLibs
+end
+
 local function newAceAddon(state)
 	return {
 		NewAddon = function(_, name)
@@ -47,6 +61,26 @@ local function newAceAddon(state)
 			end
 			function addon:Print(msg)
 				state.printed[#state.printed + 1] = msg
+			end
+			-- AceComm subset: messages go to state.bus (see tests/helpers/net.lua).
+			function addon:RegisterComm(prefix, method)
+				state.commPrefix, state.commMethod = prefix, method or "OnCommReceived"
+			end
+			function addon:SendCommMessage(prefix, text, distribution, target, prio)
+				state.sent[#state.sent + 1] = { prefix = prefix, text = text, distribution = distribution, target = target, prio = prio }
+				if state.bus then state.bus:Send(state, prefix, text, distribution, target) end
+			end
+			-- AceEvent subset: records registrations, delivers messages.
+			function addon:RegisterEvent(event, handler)
+				state.events[event] = handler or event
+			end
+			function addon:RegisterMessage(message, handler)
+				state.messageHandlers[message] = handler
+			end
+			function addon:SendMessage(message, ...)
+				state.messages[#state.messages + 1] = { message, ... }
+				local handler = state.messageHandlers[message]
+				if type(handler) == "function" then handler(message, ...) end
 			end
 			-- AceConsole:GetArgs subset: first whitespace-separated word.
 			function addon:GetArgs(input)
@@ -78,14 +112,23 @@ end
 -- `opts.guild` sets the player's guild name (nil = unguilded).
 function M.new(opts)
 	opts = opts or {}
-	local state = { chatCommands = {}, printed = {} }
+	local state = { chatCommands = {}, printed = {}, events = {}, messages = {}, messageHandlers = {}, sent = {}, timers = {} }
 	local env = setmetatable({}, { __index = _G })
 
 	local libs = {
 		["AceAddon-3.0"] = newAceAddon(state),
 		["AceDB-3.0"] = newAceDB(env),
 		["AceLocale-3.0"] = newAceLocale(),
+		["AceSerializer-3.0"] = loadRealLibs()["AceSerializer-3.0"],
+		LibDeflate = loadRealLibs().LibDeflate,
+		-- Coordinate translation is set per test through state.translate(x, y, fromMap, toMap).
+		["HereBeDragons-2.0"] = {
+			TranslateZoneCoordinates = function(_, x, y, from, to)
+				if state.translate then return state.translate(x, y, from, to) end
+			end,
+		},
 	}
+	state.libs = libs
 	env.LibStub = setmetatable({}, {
 		__call = function(_, major) return assert(libs[major], "missing lib stub " .. major) end,
 	})
@@ -96,10 +139,49 @@ function M.new(opts)
 		end,
 	}
 	env.date = os.date
+	env.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 	env.GetServerTime = function() return opts.now or 1790000000 end
 	env.GetBuildInfo = function() return "1.60.1", "70009", "Sep 25 2026", 16001 end
 	env.IsInGuild = function() return opts.guild ~= nil end
-	env.GetGuildInfo = function() return opts.guild end
+	-- Guild: opts.rank (default 0 = GM), opts.ranks (names), opts.roster
+	-- ({ name, rankIndex, officerNote, online }), opts.guildInfo text.
+	env.GetGuildInfo = function()
+		if opts.guild then return opts.guild, "Rank", opts.rank or 0 end
+	end
+	env.GetTime = function() return state.time or 1000 end
+	state.roster = opts.roster or {}
+	state.guildInfo = opts.guildInfo or ""
+	state.canViewNotes = opts.canViewNotes or false
+	env.C_GuildInfo = {
+		GuildRoster = function() state.rosterRequests = (state.rosterRequests or 0) + 1 end,
+		CanViewOfficerNote = function() return state.canViewNotes end,
+	}
+	env.GetNumGuildMembers = function() return #state.roster end
+	env.GetGuildRosterInfo = function(i)
+		local m = state.roster[i]
+		return m.name, "Rank", m.rankIndex, 60, "Warrior", "Zone", "", m.officerNote or "", m.online
+	end
+	local ranks = opts.ranks or { "Guild Master", "Officer", "Member" }
+	env.GuildControlGetNumRanks = function() return #ranks end
+	env.GuildControlGetRankName = function(i) return ranks[i] end
+	env.GetGuildInfoText = function() return state.guildInfo end
+	env.CanEditGuildInfo = function() return (opts.rank or 0) == 0 end
+	env.SetGuildInfoText = function(text) state.guildInfo = text end
+	env.GetNormalizedRealmName = function() return "Realm" end
+	env.C_Club = { GetGuildClubId = function() return opts.clubId end }
+	-- opts.player = "Name" (realm "Realm"), default Scout.
+	state.player = opts.player or "Scout"
+	env.UnitFullName = function() return state.player, "Realm" end
+	env.UnitGUID = function(unit)
+		if unit == "player" then return opts.player and ("Player-1234-" .. opts.player) or "Player-1234-0ABCDEF0" end
+	end
+	-- Timers run when the test calls M.runTimers(state).
+	env.C_Timer = {
+		After = function(delay, fn) state.timers[#state.timers + 1] = { delay = delay, fn = fn } end,
+		NewTicker = function(_, fn) state.tickers = state.tickers or {} state.tickers[#state.tickers + 1] = fn end,
+	}
+	env.InCombatLockdown = function() return false end
+	env.IsInInstance = function() return false end
 
 	state.env = env
 	state.ns = {}
@@ -114,6 +196,48 @@ function M.load(state, files)
 		chunk(ADDON_NAME, state.ns)
 	end
 	return state.ns
+end
+
+-- Addon files in TOC order, read from FrontierScout.toc: Locales + Core,
+-- plus UI when `withUI`.
+function M.coreFiles(withUI)
+	local files = {}
+	for line in io.lines("FrontierScout.toc") do
+		local path = line:match("^%s*((%a+)\\[^%s]+%.lua)%s*$")
+		if path and (path:find("^Locales") or path:find("^Core") or (withUI and path:find("^UI"))) then
+			files[#files + 1] = (path:gsub("\\", "/"))
+		end
+	end
+	return files
+end
+
+-- Loads Locales + Core (and UI with opts.ui, on fake frames) and runs
+-- OnInitialize; returns state, FS, ns.
+function M.boot(opts)
+	local state = M.new(opts)
+	if opts and opts.ui then require("tests.helpers.frames").install(state.env, state) end
+	local ns = M.load(state, M.coreFiles(opts and opts.ui))
+	ns.FS:OnInitialize()
+	state.printed = {}
+	return state, ns.FS, ns
+end
+
+-- Runs (and clears) pending C_Timer.After callbacks.
+function M.runTimers(state)
+	local pending = state.timers
+	state.timers = {}
+	for _, t in ipairs(pending) do t.fn() end
+	return #pending
+end
+
+-- Delivers a game event to the addon's registered handler.
+function M.fire(state, event, ...)
+	local handler = assert(state.events[event], "no handler for " .. event)
+	if type(handler) == "string" then
+		state.ns.FS[handler](state.ns.FS, event, ...)
+	else
+		handler(event, ...)
+	end
 end
 
 -- Runs a slash command the way WoW would (e.g. "status").

@@ -5,6 +5,8 @@
 ## Version: @project-version@
 ## SavedVariables: FrontierScoutDB
 ## OptionalDeps: TomTom
+## IconTexture: Interface\Icons\INV_Misc_Map_01
+## AddonCompartmentFunc: FrontierScout_OnAddonCompartmentClick
 ## X-License: MIT
 ## X-Website: https://github.com/xsansebastian/FrontierScout
 
@@ -13,3 +15,23 @@ embeds.xml
 Locales\enUS.lua
 
 Core\Init.lua
+Core\Categories.lua
+Core\Format.lua
+Core\ACL.lua
+Core\Digest.lua
+Core\Store.lua
+Core\Query.lua
+Core\Guild.lua
+Core\Capture.lua
+Core\Waypoint.lua
+Core\Comm.lua
+Core\Sync.lua
+
+UI\Icons.lua
+UI\Widgets.lua
+UI\Tooltip.lua
+UI\EditDialog.lua
+UI\Browser.lua
+UI\MapPins.lua
+UI\MapPanel.lua
+UI\Options.lua
