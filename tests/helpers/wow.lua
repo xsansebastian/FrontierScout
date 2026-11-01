@@ -213,8 +213,10 @@ function M.new(opts)
 			return 0
 		end
 	end
-	env.Enum = { SendAddonMessageResult = { Success = 0, AddonMessageThrottle = 3, NotInGroup = 5, ChannelThrottle = 8,
-		GeneralError = 9 } }
+	-- Forever's values (modern client): 10-12 are new since 12.0.
+	env.Enum = { SendAddonMessageResult = { Success = 0, InvalidPrefix = 1, InvalidMessage = 2, AddonMessageThrottle = 3,
+		InvalidChatType = 4, NotInGroup = 5, TargetRequired = 6, InvalidChannel = 7, ChannelThrottle = 8, GeneralError = 9,
+		NotInGuild = 10, AddOnMessageLockdown = 11, TargetOffline = 12 } }
 	env.GetNumGuildMembers = function() return #state.roster end
 	env.GetGuildRosterInfo = function(i)
 		local m = state.roster[i]

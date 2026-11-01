@@ -47,8 +47,9 @@ describe("/fs commtest", function()
 		local arch, gm = net:Client("Arch"), net:Client("Gm")
 		wow.slash(arch.state, "commtest")
 		local out = printed(arch)
-		assert.matches("Account: level 20 | trial: ? | restricted: ? | squelched: ? | silenced: ? | can speak in guild chat: true",
-			out, 1, true)
+		assert.matches("Account: level 20 | can send chat: ? | can receive chat: ? | can speak in guild chat: true | "
+			.. "messaging lockdown: ? | muted: ? | silenced: ? | squelched: ? | chat disabled: ? | "
+			.. "age-verification restricted: ? | trial: ? | restricted: ?", out, 1, true)
 		assert.matches("Prefixes: FScout yes, FScoutTo yes, FScoutPing yes", out, 1, true)
 		assert.matches("Sent over GUILD: accepted", out, 1, true)
 		assert.matches("Sent over CHANNEL: accepted", out, 1, true)
@@ -71,6 +72,22 @@ describe("/fs commtest", function()
 		wow.runTimers(arch.state)
 		assert.matches("Replies over GUILD: none", printed(arch), 1, true)
 		assert.matches("Replies over CHANNEL: Gm", printed(arch), 1, true)
+	end)
+
+	it("reports WoW Forever's chat restrictions", function()
+		local net = network(false)
+		local arch = net:Client("Arch")
+		arch.state.env.C_SocialRestrictions = {
+			CanSendChat = function() return false end, CanReceiveChat = function() return true end,
+			IsMuted = function() return true end, IsSilenced = function() return false end,
+			IsSquelched = function() return false end, IsChatDisabled = function() return false end,
+			IsAgeVerificationRestricted = function() return false end,
+		}
+		arch.state.env.C_ChatInfo.InChatMessagingLockdown = function() return false end
+		wow.slash(arch.state, "commtest")
+		assert.matches("can send chat: false | can receive chat: true | can speak in guild chat: true | messaging lockdown: false | "
+			.. "muted: true | silenced: false | squelched: false | chat disabled: false | age-verification restricted: false",
+			printed(arch), 1, true)
 	end)
 
 	it("shows the game's reason when it refuses the test", function()

@@ -135,6 +135,17 @@ describe("Comm isolation", function()
 		assert.equals(Comm.RATE_LIMIT, #got)
 	end)
 
+	it("holds messages during the game's addon messaging lockdown", function()
+		local state, FS = boot()
+		local locked = true
+		state.env.C_ChatInfo.InChatMessagingLockdown = function() return locked end
+		assert.is_false(FS:Send("TEST", {}, "GUILD"))
+		assert.equals(0, #state.sent)
+		locked = false
+		FS:FlushQueue()
+		assert.equals(1, #state.sent)
+	end)
+
 	it("queues outgoing messages in combat and sends them afterwards", function()
 		local state, FS = boot()
 		state.env.InCombatLockdown = function() return true end

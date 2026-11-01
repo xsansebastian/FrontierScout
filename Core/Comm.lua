@@ -54,9 +54,12 @@ function Comm.NewRateLimiter(limit, window)
 	end
 end
 
--- Addon comms are restricted (and pointless) in combat and instances.
+-- Addon comms are restricted (and pointless) in combat and instances; the
+-- modern client (WoW Forever) also reports an addon messaging lockdown.
 function Comm.Paused()
-	return InCombatLockdown() or IsInInstance()
+	if InCombatLockdown() or IsInInstance() then return true end
+	local lockdown = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+	return lockdown ~= nil and lockdown() == true
 end
 
 -- WoW side -------------------------------------------------------------------

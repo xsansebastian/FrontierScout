@@ -36,13 +36,36 @@ local function routes()
 	return list
 end
 
+-- Everything that can stop a character's chat or addon messages. WoW Forever
+-- runs on the modern client: besides trial / restricted accounts it has
+-- C_SocialRestrictions (muted, silenced, squelched, chat disabled, age
+-- verification, can send / receive chat) and an addon messaging lockdown
+-- (C_ChatInfo.InChatMessagingLockdown, e.g. in instances).
 local function restrictions()
-	local S = C_SocialRestrictions
-	local function call(fn) return fn and tostring(fn() and true or false) or "?" end
-	local canSpeak = C_GuildInfo and C_GuildInfo.CanSpeakInGuildChat
-	return ("level %s | trial: %s | restricted: %s | squelched: %s | silenced: %s | can speak in guild chat: %s"):format(
-		tostring(UnitLevel and UnitLevel("player")), call(IsTrialAccount), call(IsRestrictedAccount),
-		call(S and S.IsSquelched), call(S and S.IsSilenced), call(canSpeak))
+	local S, C = C_SocialRestrictions, C_ChatInfo
+	local checks = {
+		{ "can send chat", S and S.CanSendChat },
+		{ "can receive chat", S and S.CanReceiveChat },
+		{ "can speak in guild chat", C_GuildInfo and C_GuildInfo.CanSpeakInGuildChat },
+		{ "messaging lockdown", C and C.InChatMessagingLockdown },
+		{ "muted", S and S.IsMuted },
+		{ "silenced", S and S.IsSilenced },
+		{ "squelched", S and S.IsSquelched },
+		{ "chat disabled", S and S.IsChatDisabled },
+		{ "age-verification restricted", S and S.IsAgeVerificationRestricted },
+		{ "trial", IsTrialAccount },
+		{ "restricted", IsRestrictedAccount },
+	}
+	local parts = { "level " .. tostring(UnitLevel and UnitLevel("player")) }
+	for _, check in ipairs(checks) do
+		local value = "?"
+		if check[2] then
+			local ok, result = pcall(check[2])
+			value = ok and tostring(result and true or false) or "error"
+		end
+		parts[#parts + 1] = ("%s: %s"):format(check[1], value)
+	end
+	return table.concat(parts, " | ")
 end
 
 local function prefixes()
