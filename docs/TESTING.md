@@ -66,6 +66,35 @@ and turn on `/fs debug` while testing.
 | Report outdated | Shows in the archivists' queue; Dismiss sends the reason back |
 | Alt in another guild | Sees none of the first guild's data |
 
+## When messages don't arrive
+
+`/fs commtest` checks that addon messages travel both ways between you and every other online
+FrontierScout user, on the guild channel and on the private channel. It uses the game API directly,
+on its own prefix (`FScoutPing`), without AceComm, serialization, compression or FrontierScout's
+filters, so a missing reply points at the game or the server, not at the addon.
+
+1. Everyone involved updates and `/reload`s, then waits ~5 s (joining the private channel).
+2. One player runs `/fs commtest`. It prints:
+   - `Account:` level, trial / restricted / squelched / silenced, can speak in guild chat;
+   - `Prefixes:` whether FrontierScout's prefixes are registered, and how many all addons use
+     (a client has a limit);
+   - `Sent over GUILD / CHANNEL:` what the game answered (`accepted` or `refused (reason)`).
+3. Every other online user sees "*X is testing FrontierScout messages: received over …*" and
+   replies automatically.
+4. After 10 s the tester sees `Replies over GUILD: …` and `Replies over CHANNEL: …`.
+5. The other players run it too, to check the other direction.
+
+The same test without the addon (paste one line at a time):
+
+```
+/run F=F or CreateFrame("Frame")print("FSTest reg:",C_ChatInfo.RegisterAddonMessagePrefix("FSTest"))F:RegisterEvent("CHAT_MSG_ADDON")F:SetScript("OnEvent",function(_,_,p,m,d,s)if p=="FSTest"then print("GOT",m,"via",d,"from",s)end end)
+/run print("guild:",C_ChatInfo.SendAddonMessage("FSTest","hi-guild","GUILD"))
+/run print("channel:",C_ChatInfo.SendAddonMessage("FSTest","hi-chan","CHANNEL",(GetChannelName("FS22965401"))))
+```
+
+(The listener line goes first, on every client; replace `22965401` with your guild's club id from
+`/fs whoami` or the `/fs debug` "guild bucket" line.)
+
 ## Open questions to answer (SPEC §12)
 
 1. `/fs status`: interface number on the live client.

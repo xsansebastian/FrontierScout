@@ -26,6 +26,7 @@ Core\Guild.lua
 Core\Capture.lua
 Core\Waypoint.lua
 Core\Comm.lua
+Core\CommTest.lua
 Core\Sync.lua
 Core\Review.lua
 

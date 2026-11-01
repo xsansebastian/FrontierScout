@@ -208,7 +208,7 @@ end
 -- GUILD, or on `distribution` / `target`, and returns what the game answered.
 function Comm.Probe(distribution, target)
 	if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) or not IsInGuild() then return "not available" end
-	local ok, result = pcall(C_ChatInfo.SendAddonMessage, "FScoutPing", "ping", distribution or "GUILD", target)
+	local ok, result = pcall(C_ChatInfo.SendAddonMessage, "FScoutPing", "probe", distribution or "GUILD", target)
 	if not ok then return "error: " .. tostring(result) end
 	if result == nil or result == true or result == 0 then return "sent" end
 	for key, value in pairs(Enum and Enum.SendAddonMessageResult or {}) do

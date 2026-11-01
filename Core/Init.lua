@@ -101,7 +101,7 @@ end
 -- Slash commands ----------------------------------------------------------
 
 local commands = {}
-local commandOrder = { "help", "add", "sync", "waypoints", "config", "status", "whoami", "version", "debug" }
+local commandOrder = { "help", "add", "sync", "waypoints", "config", "status", "whoami", "commtest", "version", "debug" }
 local commandHelp = {
 	help = L["show this help"],
 	add = L["record a discovery here (optional: title)"],
@@ -109,6 +109,7 @@ local commandHelp = {
 	config = L["open the options"],
 	sync = L["sync with online archivists now"],
 	whoami = L["show how the game names you (for bug reports)"],
+	commtest = L["test addon messages with the guild, both ways"],
 	status = L["show addon, client and guild status"],
 	version = L["show the addon version"],
 	debug = L["toggle debug output"],
@@ -231,6 +232,10 @@ function commands.status(self)
 	local global = self.db.global
 	self:Print(L["Saved data: session %d, first seen %s"]:format(global.sessions, date("%Y-%m-%d", global.firstSeen)))
 	self:Print(L["Debug output: %s"]:format(self.db.profile.debug and L["on"] or L["off"]))
+end
+
+function commands.commtest(self)
+	self:CommTest()
 end
 
 function commands.debug(self)
