@@ -54,9 +54,12 @@ function Comm.NewRateLimiter(limit, window)
 	end
 end
 
--- Addon comms are restricted (and pointless) in combat and instances.
+-- Addon comms are restricted (and pointless) in combat and instances; the
+-- modern client (WoW Forever) also reports an addon messaging lockdown.
 function Comm.Paused()
-	return InCombatLockdown() or IsInInstance()
+	if InCombatLockdown() or IsInInstance() then return true end
+	local lockdown = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+	return lockdown ~= nil and lockdown() == true
 end
 
 -- WoW side -------------------------------------------------------------------
@@ -208,7 +211,7 @@ end
 -- GUILD, or on `distribution` / `target`, and returns what the game answered.
 function Comm.Probe(distribution, target)
 	if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) or not IsInGuild() then return "not available" end
-	local ok, result = pcall(C_ChatInfo.SendAddonMessage, "FScoutPing", "ping", distribution or "GUILD", target)
+	local ok, result = pcall(C_ChatInfo.SendAddonMessage, "FScoutPing", "probe", distribution or "GUILD", target)
 	if not ok then return "error: " .. tostring(result) end
 	if result == nil or result == true or result == 0 then return "sent" end
 	for key, value in pairs(Enum and Enum.SendAddonMessageResult or {}) do

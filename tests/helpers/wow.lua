@@ -175,9 +175,25 @@ function M.new(opts)
 	}
 	env.C_ChatInfo = {
 		IsAddonMessagePrefixRegistered = function(prefix) return not (state.unregistered and state.unregistered[prefix]) end,
-		SendAddonMessage = function(prefix, text, distribution)
+		-- Direct sends are recorded in state.raw (CommTest, probes).
+		SendAddonMessage = function(prefix, text, distribution, target)
 			state.probes = (state.probes or 0) + 1
-			return state.sendResult or (state.refuse and state.refuse[distribution]) or 0, prefix, text, distribution
+			state.raw = state.raw or {}
+			local refused = state.sendResult or (state.refuse and state.refuse[distribution])
+			if not refused then
+				state.raw[#state.raw + 1] = { prefix = prefix, text = text, distribution = distribution, target = target }
+			end
+			return refused or 0
+		end,
+		RegisterAddonMessagePrefix = function(prefix)
+			state.prefixes = state.prefixes or {}
+			state.prefixes[prefix] = true
+			return 0
+		end,
+		GetRegisteredAddonMessagePrefixes = function()
+			local list = {}
+			for prefix in pairs(state.prefixes or {}) do list[#list + 1] = prefix end
+			return list
 		end,
 	}
 	-- Chat channels (only with opts.channels): numbers from 5 up.
@@ -197,8 +213,10 @@ function M.new(opts)
 			return 0
 		end
 	end
-	env.Enum = { SendAddonMessageResult = { Success = 0, AddonMessageThrottle = 3, NotInGroup = 5, ChannelThrottle = 8,
-		GeneralError = 9 } }
+	-- Forever's values (modern client): 10-12 are new since 12.0.
+	env.Enum = { SendAddonMessageResult = { Success = 0, InvalidPrefix = 1, InvalidMessage = 2, AddonMessageThrottle = 3,
+		InvalidChatType = 4, NotInGroup = 5, TargetRequired = 6, InvalidChannel = 7, ChannelThrottle = 8, GeneralError = 9,
+		NotInGuild = 10, AddOnMessageLockdown = 11, TargetOffline = 12 } }
 	env.GetNumGuildMembers = function() return #state.roster end
 	env.GetGuildRosterInfo = function(i)
 		local m = state.roster[i]

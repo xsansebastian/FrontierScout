@@ -289,6 +289,11 @@ L["Reads Guild Info again after you have edited it."] = true
 
 -- Diagnostics
 L["show how the game names you (for bug reports)"] = true
+L["test addon messages with the guild, both ways"] = true
+L["You are not in a guild."] = true
+L["A test is already running."] = true
+L["Testing addon messages with the guild; results in %d seconds..."] = true
+L["%s is testing FrontierScout messages: received over %s."] = true
 
 -- Guild Setup (own tag)
 L["You are not an archivist: your rank qualifies, but your own officer note needs {FS:A}. Until then your discoveries go to the archivists for review."] = true
